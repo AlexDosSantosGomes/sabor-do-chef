@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#b5121b">
+<title>Sabor do Chef | Administração</title>
+
+<style>
+:root {
+  --red: #b5121b;
+  --dark: #850d14;
+  --bg: #f5f5f5;
+  --white: #fff;
+  --text: #252525;
+  --muted: #777;
+  --border: #e5e5e5;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+.hidden { display: none !important; }
+
+header {
+  background: var(--red);
+  color: white;
+  padding: 17px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+header h1 { margin: 0; font-size: 21px; }
+header small { opacity: .85; }
+
+main {
+  width: min(1100px, 94%);
+  margin: 25px auto;
+}
+.panel {
+  background: white;
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 2px 10px #0000000b;
+  margin-bottom: 20px;
+}
+h2 { margin: 0 0 18px; font-size: 20px; }
+
+.login {
+  width: min(420px, 92%);
+  margin: 70px auto;
+}
+.brand {
+  text-align: center;
+  color: var(--red);
+  font-size: 27px;
+  font-weight: bold;
+  margin-bottom: 22px;
+}
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: bold;
+  margin: 13px 0 6px;
+}
+input, select, textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: white;
+  outline: none;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--red);
+}
+button {
+  border: 0;
+  border-radius: 7px;
+  padding: 12px 16px;
+  font-weight: bold;
+}
+.primary { background: var(--red); color: white; }
+.primary:hover { background: var(--dark); }
+.secondary { background: #eee; color: #333; }
+.danger { background: #fff0f0; color: #a40000; }
+.full { width: 100%; margin-top: 17px; }
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 15px;
+}
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 17px;
+}
+.checkline input { width: auto; }
+.checkline label { margin: 0; }
+.message {
+  margin-top: 13px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.error { color: #b00020; }
+.success { color: #16723a; }
+
+.product-list { display: grid; gap: 12px; }
+.product {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 12px;
+  background: white;
+}
+.product img {
+  width: 70px;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 7px;
+  background: #eee;
+}
+.product-info { flex: 1; min-width: 0; }
+.product-info strong { display: block; margin-bottom: 5px; }
+.product-info small { color: var(--muted); line-height: 1.5; }
+.product-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.product-actions button { padding: 9px 11px; }
+.status {
+  display: inline-block;
+  font-size: 12px;
+  padding: 4px 7px;
+  border-radius: 20px;
+  background: #e8f7ed;
+  color: #16723a;
+}
+.status.off { background: #eee; color: #666; }
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+.toolbar input { flex: 1; }
+.muted { color: var(--muted); font-size: 13px; }
+
+@media(max-width:650px) {
+  main { margin: 15px auto; }
+  .panel { padding: 16px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .product { align-items: flex-start; flex-wrap: wrap; }
+  .product-actions { width: 100%; }
+  .product-actions button { flex: 1; }
+  header h1 { font-size: 18px; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div>
+    <h1>Sabor do Chef</h1>
+    <small>Painel administrativo</small>
+  </div>
+  <button id="logoutBtn" class="secondary hidden">Sair</button>
+</header>
+
+<section id="loginScreen" class="login panel">
+  <div class="brand">Sabor do Chef</div>
+  <h2>Entrar no sistema</h2>
+
+  <form id="loginForm">
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username"
+      placeholder="Seu e-mail" required>
+
+    <label for="password">Senha</label>
+    <input id="password" type="password"
+      autocomplete="current-password" placeholder="Sua senha" required>
+
+    <button class="primary full" type="submit">Entrar</button>
+    <div id="loginMessage" class="message"></div>
+  </form>
+</section>
+
+<main id="appScreen" class="hidden">
+
+  <section class="panel">
+    <h2 id="formTitle">Cadastrar produto</h2>
+
+    <form id="productForm">
+      <input id="productId" type="hidden">
+
+      <div class="form-grid">
+        <div>
+          <label for="productName">Nome do produto *</label>
+          <input id="productName" required maxlength="120"
+            placeholder="Ex.: X-Burger">
+        </div>
+
+        <div>
+          <label for="category">Categoria *</label>
+          <select id="category" required>
+            <option value="">Carregando categorias...</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="price">Preço (R$) *</label>
+          <input id="price" type="number" min="0"
+            step="0.01" required placeholder="Ex.: 18,90">
+        </div>
+
+        <div>
+          <label for="stock">Quantidade em estoque *</label>
+          <input id="stock" type="number" min="0"
+            step="1" required value="0">
+        </div>
+      </div>
+
+      <label for="description">Descrição</label>
+      <textarea id="description" rows="2"
+        placeholder="Descrição do produto"></textarea>
+
+      <label for="photo">Endereço da foto (URL)</label>
+      <input id="photo" type="url" placeholder="https://...">
+
+      <div class="checkline">
+        <input id="active" type="checkbox" checked>
+        <label for="active">Produto ativo no cardápio</label>
+      </div>
+
+      <div class="top-actions" style="margin-top:18px">
+        <button class="primary" type="submit" id="saveBtn">
+          Salvar produto
+        </button>
+        <button class="secondary hidden" type="button" id="cancelEdit">
+          Cancelar edição
+        </button>
+      </div>
+
+      <div id="productMessage" class="message"></div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Produtos cadastrados</h2>
+
+    <div class="toolbar">
+      <input id="searchProduct" type="search"
+        placeholder="Pesquisar produto...">
+      <button class="secondary" id="refreshBtn" type="button">
+        Atualizar
+      </button>
+    </div>
+
+    <div id="productList" class="product-list">
+      Carregando produtos...
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Cadastrar categoria</h2>
+    <form id="categoryForm">
+      <label for="categoryName">Nome da categoria</label>
+      <input id="categoryName" required maxlength="80"
+        placeholder="Ex.: Hambúrgueres">
+      <button class="primary" type="submit" style="margin-top:12px">
+        Adicionar categoria
+      </button>
+      <div id="categoryMessage" class="message"></div>
+    </form>
+  </section>
+
+</main>
+
+<script type="module">
+import { createClient } from
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+const SUPABASE_URL =
+  'https://enakuleybfvzqurrttwl.supabase.co';
+
+const SUPABASE_KEY =
+  'sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyaY';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const $ = (id) => document.getElementById(id);
+
+let products = [];
+let categories = [];
+let currentUser = null;
+
+function showMessage(id, message, type = '') {
+  const el = $(id);
+  el.textContent = message;
+  el.className = 'message ' + type;
+}
+
+function money(cents) {
+  return (Number(cents) / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+}
+
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char]);
+}
+
+function showLogin() {
+  $('loginScreen').classList.remove('hidden');
+  $('appScreen').classList.add('hidden');
+  $('logoutBtn').classList.add('hidden');
+}
+
+function showApp() {
+  $('loginScreen').classList.add('hidden');
+  $('appScreen').classList.remove('hidden');
+  $('logoutBtn').classList.remove('hidden');
+}
+
+async function checkAdmin(user) {
+  const { data, error } = await supabase
+    .from('admin_profiles')
+    .select('display_name, is_active')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (!data || data.is_active !== true) {
+    throw new Error('Usuário sem autorização de administrador.');
+  }
+
+  return data;
+}
+
+async function startApp(user) {
+  try {
+    currentUser = user;
+    await checkAdmin(user);
+    showApp();
+    await loadCategories();
+    await loadProducts();
+  } catch (error) {
+    await supabase.auth.signOut();
+    currentUser = null;
+    showLogin();
+    showMessage('loginMessage',
+      error.message || 'Não foi possível acessar o painel.', 'error');
+  }
+}
+
+$('loginForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  showMessage('loginMessage', 'Verificando acesso...');
+
+  const email = $('email').value.trim();
+  const password = $('password').value;
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if (error) {
+    showMessage('loginMessage',
+      'Não foi possível entrar. Confira seu e-mail e sua senha.',
+      'error');
+    return;
+  }
+
+  await startApp(data.user);
+});
+
+$('logoutBtn').addEventListener('click', async () => {
+  await supabase.auth.signOut();
+  currentUser = null;
+  showLogin();
+});
+
+async function loadCategories() {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name, active, sort_order')
+    .order('sort_order')
+    .order('name');
+
+  if (error) throw error;
+
+  categories = data || [];
+
+  $('category').innerHTML =
+    '<option value="">Selecione uma categoria</option>' +
+    categories
+      .filter(item => item.active)
+      .map(item =>
+        `<option value="${item.id}">${escapeHTML(item.name)}</option>`
+      ).join('');
+}
+
+async function loadProducts() {
+  $('productList').textContent = 'Carregando produtos...';
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, name, description, price_cents, photo_url, active, stock_quantity, category_id, categories(name)')
+    .order('name');
+
+  if (error) {
+    $('productList').textContent =
+      'Erro ao carregar produtos: ' + error.message;
+    return;
+  }
+
+  products = data || [];
+  renderProducts();
+}
+
+function renderProducts() {
+  const search = $('searchProduct').value
+    .trim().toLowerCase();
+
+  const filtered = products.filter(product =>
+    product.name.toLowerCase().includes(search)
+  );
+
+  if (!filtered.length) {
+    $('productList').textContent = 'Nenhum produto encontrado.';
+    return;
+  }
+
+  $('productList').innerHTML = filtered.map(product => {
+    const image = product.photo_url
+      ? escapeHTML(product.photo_url)
+      : '';
+
+    const categoryName = product.categories?.name || 'Sem categoria';
+
+    return `
+      <article class="product">
+        ${image
+          ? `<img src="${image}" alt=""
+              onerror="this.style.display='none'">`
+          : `<div style="width:70px;height:70px;background:#eee;border-radius:7px"></div>`
+        }
+
+        <div class="product-info">
+          <strong>${escapeHTML(product.name)}</strong>
+          <div>${money(product.price_cents)}</div>
+          <small>
+            ${escapeHTML(categoryName)}<br>
+            Estoque: ${product.stock_quantity}
+          </small>
+          <div style="margin-top:7px">
+            <span class="status ${product.active ? '' : 'off'}">
+              ${product.active ? 'Ativo' : 'Inativo'}
+            </span>
+          </div>
+        </div>
+
+        <div class="product-actions">
+          <button class="secondary" data-edit="${product.id}">
+            Editar
+          </button>
+          <button class="danger" data-toggle="${product.id}">
+            ${product.active ? 'Desativar' : 'Ativar'}
+          </button>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+$('searchProduct').addEventListener('input', renderProducts);
+$('refreshBtn').addEventListener('click', loadProducts);
+
+function resetForm() {
+  $('productForm').reset();
+  $('productId').value = '';
+  $('stock').value = '0';
+  $('active').checked = true;
+  $('formTitle').textContent = 'Cadastrar produto';
+  $('saveBtn').textContent = 'Salvar produto';
+  $('cancelEdit').classList.add('hidden');
+  showMessage('productMessage', '');
+}
+
+$('cancelEdit').addEventListener('click', resetForm);
+
+$('productList').addEventListener('click', async (event) => {
+  const editId = event.target.dataset.edit;
+  const toggleId = event.target.dataset.toggle;
+
+  if (editId) {
+    const product = products.find(p => p.id === editId);
+    if (!product) return;
+
+    $('productId').value = product.id;
+    $('productName').value = product.name;
+    $('category').value = product.category_id;
+    $('price').value = (product.price_cents / 100).toFixed(2);
+    $('stock').value = product.stock_quantity;
+    $('description').value = product.description || '';
+    $('photo').value = product.photo_url || '';
+    $('active').checked = product.active;
+
+    $('formTitle').textContent = 'Editar produto';
+    $('saveBtn').textContent = 'Salvar alterações';
+    $('cancelEdit').classList.remove('hidden');
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  if (toggleId) {
+    const product = products.find(p => p.id === toggleId);
+    if (!product) return;
+
+    if (!product.active && product.stock_quantity === 0) {
+      alert('Não é possível ativar um produto sem estoque.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('products')
+      .update({ active: !product.active })
+      .eq('id', product.id);
+
+    if (error) {
+      alert('Erro: ' + error.message);
+      return;
+    }
+
+    await loadProducts();
+  }
+});
+
+$('productForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const name = $('productName').value.trim();
+  const categoryId = $('category').value;
+  const price = Number($('price').value);
+  const stock = Number($('stock').value);
+
+  if (!name || !categoryId || !Number.isFinite(price) ||
+      price < 0 || !Number.isInteger(stock) || stock < 0) {
+    showMessage('productMessage',
+      'Confira os campos obrigatórios.', 'error');
+    return;
+  }
+
+  const priceCents = Math.round(price * 100);
+
+  const payload = {
+    name,
+    category_id: categoryId,
+    description: $('description').value.trim() || null,
+    price_cents: priceCents,
+    photo_url: $('photo').value.trim() || null,
+    stock_quantity: stock,
+    active: stock > 0 && $('active').checked
+  };
+
+  const id = $('productId').value;
+  $('saveBtn').disabled = true;
+  showMessage('productMessage', 'Salvando produto...');
+
+  let result;
+
+  if (id) {
+    result = await supabase
+      .from('products')
+      .update(payload)
+      .eq('id', id);
+  } else {
+    result = await supabase
+      .from('products')
+      .insert(payload);
+  }
+
+  $('saveBtn').disabled = false;
+
+  if (result.error) {
+    showMessage('productMessage',
+      'Erro ao salvar: ' + result.error.message, 'error');
+    return;
+  }
+
+  resetForm();
+  showMessage('productMessage',
+    stock === 0
+      ? 'Produto salvo como inativo porque o estoque está zerado.'
+      : 'Produto salvo com sucesso!', 'success');
+
+  await loadProducts();
+});
+
+$('categoryForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const name = $('categoryName').value.trim();
+  if (!name) return;
+
+  const { error } = await supabase
+    .from('categories')
+    .insert({
+      name,
+      active: true,
+      sort_order: categories.length + 1
+    });
+
+  if (error) {
+    showMessage('categoryMessage',
+      'Erro ao cadastrar categoria: ' + error.message, 'error');
+    return;
+  }
+
+  $('categoryName').value = '';
+  showMessage('categoryMessage',
+    'Categoria cadastrada!', 'success');
+
+  await loadCategories();
+});
+
+async function restoreSession() {
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error) {
+    showLogin();
+    return;
+  }
+
+  if (data.session?.user) {
+    await startApp(data.session.user);
+  } else {
+    showLogin();
+  }
+}
+
+restoreSession();
+</script>
+
+</body>
+</html>
