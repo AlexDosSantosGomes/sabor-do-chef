@@ -299,8 +299,9 @@ import { createClient } from
 const SUPABASE_URL = 'https://enakuleybfvzqurrttwl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA';
 
-const $ = (id) => document.getElementById(id);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const $ = (id) => document.getElementById(id);
 let products = [];
 let categories = [];
 let currentUser = null;
