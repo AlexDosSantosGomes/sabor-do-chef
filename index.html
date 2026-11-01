@@ -390,10 +390,10 @@ $('loginForm').addEventListener('submit', async (event) => {
   });
 
   if (error) {
-    showMessage('loginMessage',
-      'Não foi possível entrar. Confira seu e-mail e sua senha.',
-      'error');
-    return;
+  showMessage('loginMessage',
+    'Erro do Supabase: ' + error.message,
+    'error');
+  return;
   }
 
   await startApp(data.user);
