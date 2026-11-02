@@ -68,22 +68,22 @@ loadPushSubscription().then(x=>{if(x)pushSubscription=x;}).catch(()=>{});
 let products=[],categories=[],category='all',cart=new Map(),accompaniments=new Map(),pendingProduct=null;
 function message(t,kind='error'){$('message').textContent=t;$('message').className='message '+kind}
 async function load(){
- const [c,p,a]=await Promise.all([
+ const [c,p]=await Promise.all([
   supabase.from('categories').select('id,name,sort_order').eq('active',true).order('sort_order'),
-  supabase.from('products').select('id,category_id,name,description,price_cents,photo_url,stock_quantity').eq('active',true).gt('stock_quantity',0).order('name'),
-  supabase.from('product_accompaniments').select('id,product_id,name,sort_order').eq('active',true).order('sort_order')
+  supabase.from('products').select('id,category_id,name,description,price_cents,photo_url,stock_quantity').eq('active',true).gt('stock_quantity',0).order('name')
  ]);
- if(c.error||p.error||a.error){
+ if(c.error||p.error){
   const details = [
    c.error ? 'Categorias: ' + c.error.message : '',
-   p.error ? 'Produtos: ' + p.error.message : '',
-   a.error ? 'Acompanhamentos: ' + a.error.message : ''
+   p.error ? 'Produtos: ' + p.error.message : ''
   ].filter(Boolean).join(' | ');
   $('categories').textContent='Erro ao carregar o cardápio.';
   $('products').textContent=details || 'O Supabase não retornou os dados.';
   console.error('Erro ao carregar cardápio:', {categoriesError:c.error, productsError:p.error});
   return;
  }
+ const a=await supabase.from('product_accompaniments').select('id,product_id,name,sort_order').eq('active',true).order('sort_order');
+ if(a.error) console.warn('Acompanhamentos indisponíveis; exibindo produtos normalmente:',a.error.message);
  const allowedCategories=['quentinha','quentinhas','bebida','bebidas','sobremesa','sobremesas','porcao','porcoes'];
  const normalizeCategory=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
  const visibleCategories=(c.data||[]).filter(x=>allowedCategories.includes(normalizeCategory(x.name)));
