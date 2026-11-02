@@ -58,13 +58,14 @@ input,textarea,select{width:100%;border:1px solid #d7d7d7;border-radius:9px;padd
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
+const $=id=>document.getElementById(id), money=c=>(c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const VAPID_PUBLIC_KEY='BIgr6BkiyOkvhJDxuLQzyMl0tgBsDH82KsQciYF41a2rJ7WsRtPluX4kgtHJthctbK4sOV2ujKteF_zjLp0cIjg';let pushSubscription=null;
 function urlBase64ToUint8Array(v){const p='='.repeat((4-v.length%4)%4),r=atob((v+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...r].map(c=>c.charCodeAt(0)));}
 async function loadPushSubscription(){if(!('serviceWorker'in navigator)||!('PushManager'in window))return null;const r=await navigator.serviceWorker.register('./sw.js');pushSubscription=await r.pushManager.getSubscription();return pushSubscription;}
 $('enable-push').addEventListener('click',async()=>{const s=$('push-status'),b=$('enable-push');b.disabled=true;try{if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window))throw Error('Este navegador não oferece suporte a notificações push.');if(!window.isSecureContext)throw Error('Abra o cardápio pelo endereço HTTPS.');const p=await Notification.requestPermission();if(p!=='granted')throw Error('Permissão não concedida. Ative nas configurações do navegador.');const r=await navigator.serviceWorker.register('./sw.js');pushSubscription=await r.pushManager.getSubscription();if(!pushSubscription)pushSubscription=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});s.textContent='Notificações ativadas neste aparelho.';b.textContent='Notificações ativadas';}catch(e){s.textContent=e.message||'Não foi possível ativar as notificações.';}finally{b.disabled=false;}});
 loadPushSubscription().then(x=>{if(x){pushSubscription=x;$('push-status').textContent='Este aparelho já está inscrito para receber avisos.';$('enable-push').textContent='Notificações ativadas';}}).catch(()=>{});
 
-const $=id=>document.getElementById(id), money=c=>(c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+
 let products=[],categories=[],category='all',cart=new Map(),accompaniments=new Map(),pendingProduct=null;
 function message(t,kind='error'){$('message').textContent=t;$('message').className='message '+kind}
 async function load(){
