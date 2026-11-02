@@ -48,7 +48,7 @@ input,textarea,select{width:100%;border:1px solid #d7d7d7;border-radius:9px;padd
 <div class="mobile"><button class="btn" id="go-cart">Ver pedido · <span id="mobile-total">R$ 0,00</span></button></div>
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyaQ');
+const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
 const $=id=>document.getElementById(id), money=c=>(c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 let products=[],categories=[],category='all',cart=new Map();
 function message(t,kind='error'){$('message').textContent=t;$('message').className='message '+kind}
