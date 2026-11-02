@@ -1,0 +1,2 @@
+self.addEventListener('push',e=>{let d={};try{d=e.data?e.data.json():{}}catch{}e.waitUntil(self.registration.showNotification(d.title||'Sabor do Chef',{body:d.body||'Seu pedido teve uma atualização.',data:{url:'./cardapio-com-logo-atualizado.html'}}));});
+self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(a=>{for(const c of a){if('focus'in c)return c.focus();}return clients.openWindow('./cardapio-com-logo-atualizado.html');}));});
