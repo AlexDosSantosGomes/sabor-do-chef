@@ -697,7 +697,7 @@ async function renderAccompaniments() {
         </div>
       </article>`).join('');
   }
-  $('accompMessage').textContent = 'Opções ativas: ' + activeCount + ' de 2.';
+  $('accompMessage').textContent = 'Opções cadastradas e ativas: ' + activeCount + '. O cliente pode selecionar até 2 por prato.';
   $('accompMessage').className = 'message';
 }
 
@@ -719,10 +719,6 @@ $('accompForm').addEventListener('submit', async (event) => {
     .order('sort_order');
   if (readError) {
     showMessage('accompMessage', 'Erro ao verificar opções: ' + readError.message, 'error');
-    return;
-  }
-  if ((existing || []).filter(x => x.active).length >= 2) {
-    showMessage('accompMessage', 'Este prato já possui 2 acompanhamentos ativos. Desative um antes de adicionar outro.', 'error');
     return;
   }
   if ((existing || []).some(x => x.name?.toLowerCase() === name.toLowerCase())) {
@@ -747,22 +743,6 @@ $('accompList').addEventListener('click', async (event) => {
   if (!button) return;
   const id = button.dataset.accompToggle;
   const currentlyActive = button.dataset.active === 'true';
-  if (!currentlyActive) {
-    const productId = $('accompProduct').value;
-    const { data, error } = await supabase
-      .from('product_accompaniments')
-      .select('id')
-      .eq('product_id', productId)
-      .eq('active', true);
-    if (error) {
-      showMessage('accompMessage', 'Erro ao verificar opções: ' + error.message, 'error');
-      return;
-    }
-    if ((data || []).length >= 2) {
-      showMessage('accompMessage', 'Este prato já possui 2 opções ativas.', 'error');
-      return;
-    }
-  }
   const { error } = await supabase.from('product_accompaniments')
     .update({ active: !currentlyActive }).eq('id', id);
   if (error) {
