@@ -803,16 +803,17 @@ async function loadDeliveryOrders() {
       ? 'PEDIDO RECUSADO'
       : isAccepted ? 'PEDIDO ACEITO — EM PREPARAÇÃO' : 'PEDIDO RECEBIDO — AGUARDANDO CONFIRMAÇÃO';
     const productSubtotal = (order.order_items || []).reduce((sum, item) => sum + (Number(item.unit_price_cents) * Number(item.quantity)), 0);
+    const separator = '━━━━━━━━━━━━━━━━━━━━';
     const whatsappItems = (order.order_items || []).map(item => {
       const accompaniments = item.order_item_accompaniments || [];
       const unitLines = Array.from({ length: Number(item.quantity) || 0 }, (_, index) => {
         const selected = accompaniments
           .filter(a => Number(a.unit_index) === index)
           .map(a => a.accompaniment_name);
-        return selected.length ? `   Acompanhamentos: ${selected.join(', ')}` : '';
+        return selected.length ? `Acompanhamentos: ${selected.join(', ')}` : '';
       }).filter(Boolean);
       const details = [
-        item.notes ? `   Observação: ${item.notes}` : '',
+        item.notes ? `Observação: ${item.notes}` : '',
         ...unitLines
       ].filter(Boolean);
       return [
@@ -820,40 +821,47 @@ async function loadDeliveryOrders() {
         `  Valor: ${money(Number(item.unit_price_cents) * Number(item.quantity))}`,
         ...details
       ].join('\n');
-    }).join('\n\n');
+    }).join(`\n\n${separator}\n\n`);
 
     const whatsappMessage = [
       `Olá, ${order.customer_name}! Tudo bem?`,
       '',
-      '━━━━━━━━━━━━━━━━━━━━',
-      '          SABOR DO CHEF',
-      `       ${orderStatusText}`,
-      '━━━━━━━━━━━━━━━━━━━━',
+      separator,
+      'SABOR DO CHEF',
+      orderStatusText,
+      separator,
       '',
-      `Pedido nº: #${order.order_number}`,
+      `PEDIDO Nº: #${order.order_number}`,
       `Data: ${date}`,
       '',
+      separator,
       'DADOS DO CLIENTE',
       `Nome: ${order.customer_name}`,
       `Telefone: ${order.customer_phone || 'Não informado'}`,
       `Endereço: ${order.delivery_address || 'Não informado'}`,
       '',
+      separator,
       'PAGAMENTO',
       `Forma: ${paymentNames[order.payment_method] || order.payment_method || 'Não informado'}`,
       order.needs_change ? `Troco para: ${money(order.change_for_cents)}` : '',
       '',
+      separator,
       'ITENS DO PEDIDO',
       whatsappItems || 'Itens não disponíveis',
       '',
+      separator,
       'RESUMO FINANCEIRO',
-      `Produtos: ${money(productSubtotal)}`,
+      `Valor dos produtos: ${money(productSubtotal)}`,
       'Taxa de entrega: GRÁTIS',
       `TOTAL A PAGAR: ${money(order.total_cents)}`,
       order.status === 'CANCELADO' ? `Motivo da recusa: ${order.cancellation_reason || 'Entre em contato conosco para mais informações.'}` : '',
       '',
+      separator,
       'Agradecemos pela preferência!',
-      'Sabor do Chef ❤️'
-    ].filter(line => line !== null && line !== undefined && line !== '').join('\n');\n    const whatsappUrl = whatsappPhone
+      'Sabor do Chef ❤️',
+      separator
+    ].filter(line => line !== null && line !== undefined && line !== '').join('\n');
+    const whatsappUrl = whatsappPhone
       ? 'https://wa.me/' + whatsappPhone + '?text=' + encodeURIComponent(whatsappMessage)
       : '';
     const actions = `
