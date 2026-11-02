@@ -873,6 +873,8 @@ $('deliveryOrderList').addEventListener('click', async (event) => {
     return;
   }
 
+  const newStatus=acceptButton?'APROVADO':'CANCELADO';
+  try{const {error:notifyError}=await supabase.functions.invoke('notify-order-status',{body:{order_id:orderId,status:newStatus}});if(notifyError)console.warn('Aviso push não enviado:',notifyError.message);}catch(e){console.warn('Aviso push não enviado:',e);}
   alert(acceptButton ? 'Pedido aceito com sucesso!' : 'Pedido recusado e motivo registrado.');
   await loadDeliveryOrders();
 });
