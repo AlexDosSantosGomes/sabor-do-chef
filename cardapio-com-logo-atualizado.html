@@ -84,11 +84,15 @@ async function load(){
   console.error('Erro ao carregar cardápio:', {categoriesError:c.error, productsError:p.error});
   return;
  }
- categories=c.data||[];products=p.data||[];accompaniments=new Map();(a.data||[]).forEach(x=>{if(!accompaniments.has(x.product_id))accompaniments.set(x.product_id,[]);accompaniments.get(x.product_id).push(x.name)});drawCategories();drawProducts();
+ const allowedCategories=['quentinha','bebidas','sobremesa','porcoes'];
+ const normalizeCategory=name=>String(name||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim().replace(/s$/,'');
+ const visibleCategories=(c.data||[]).filter(x=>allowedCategories.includes(normalizeCategory(x.name)));
+ const visibleIds=new Set(visibleCategories.map(x=>x.id));
+ categories=visibleCategories;products=(p.data||[]).filter(x=>visibleIds.has(x.category_id));accompaniments=new Map();(a.data||[]).forEach(x=>{if(!accompaniments.has(x.product_id))accompaniments.set(x.product_id,[]);accompaniments.get(x.product_id).push(x.name)});drawCategories();drawProducts();
 }
 function drawCategories(){
  $('categories').innerHTML='';
- [{id:'all',name:'Todos'},...categories].forEach(c=>{
+ categories.forEach(c=>{
   const b=document.createElement('button');b.className='cat'+(category===c.id?' active':'');b.textContent=c.name;
   b.onclick=()=>{category=c.id;drawCategories();drawProducts()};$('categories').append(b);
  });
