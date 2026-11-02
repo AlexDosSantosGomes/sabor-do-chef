@@ -796,7 +796,7 @@ async function loadDeliveryOrders() {
     const rejection = order.status === 'CANCELADO' && order.cancellation_reason
       ? `<div class="message error"><strong>Motivo da recusa:</strong> ${escapeHTML(order.cancellation_reason)}</div>`
       : '';
-    const phone = String(order.customer_phone || '').replace(/\\D/g, '');
+    const phone = String(order.customer_phone || '').replace(/\D/g, '');
     const whatsappPhone = phone ? (phone.startsWith('55') ? phone : '55' + phone) : '';
     const whatsappMessage = order.status === 'CANCELADO'
       ? `Olá, ${order.customer_name}! Sobre seu pedido #${order.order_number}: infelizmente não foi possível aceitar o pedido. Motivo: ${order.cancellation_reason || 'entre em contato conosco para mais informações'}.`
