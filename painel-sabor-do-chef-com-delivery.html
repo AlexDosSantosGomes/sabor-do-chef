@@ -305,7 +305,11 @@ button {
       <button class="secondary" id="refreshOrdersBtn" type="button">Atualizar pedidos</button>
     </div>
     <p class="muted">Os pedidos feitos pelo cardápio público aparecerão aqui.</p>
+    <h3>Pedidos em andamento</h3>
     <div id="deliveryOrderList" class="order-list">Carregando pedidos...</div>
+    <h3 style="margin-top:24px">Histórico de pedidos</h3>
+    <p class="muted">Pedidos entregues e cancelados permanecem salvos aqui.</p>
+    <div id="deliveryOrderHistory" class="order-list">Carregando histórico...</div>
   </section>
 
   <section class="panel">
@@ -781,10 +785,11 @@ async function loadDeliveryOrders() {
     ENVIADO_IMPRESSAO: 'Pedido aceito',
     IMPRESSO: 'Pedido aceito',
     FALHA_IMPRESSAO: 'Pedido aceito',
-    CANCELADO: 'Pedido recusado'
+    ENTREGUE: 'Pedido entregue',
+    CANCELADO: 'Pedido cancelado'
   };
 
-  list.innerHTML = data.map(order => {
+  const renderOrder = order => {
     const date = new Date(order.created_at).toLocaleString('pt-BR');
     const items = (order.order_items || []).map(item =>
       `<li>${Number(item.quantity)}x ${escapeHTML(item.product_name_snapshot)} — ${money(item.unit_price_cents * item.quantity)}${item.notes ? `<br><small>${escapeHTML(item.notes)}</small>` : ''}</li>`
@@ -799,9 +804,7 @@ async function loadDeliveryOrders() {
     const phone = String(order.customer_phone || '').replace(/\D/g, '');
     const whatsappPhone = phone ? (phone.startsWith('55') ? phone : '55' + phone) : '';
     const isAccepted = ['APROVADO', 'ENVIADO_IMPRESSAO', 'IMPRESSO', 'FALHA_IMPRESSAO'].includes(order.status);
-    const orderStatusText = order.status === 'CANCELADO'
-      ? 'PEDIDO RECUSADO'
-      : isAccepted ? 'PEDIDO ACEITO — EM PREPARAÇÃO' : 'PEDIDO RECEBIDO — AGUARDANDO CONFIRMAÇÃO';
+    const orderStatusText = order.status === 'CANCELADO' ? 'PEDIDO CANCELADO' : order.status === 'ENTREGUE' ? 'PEDIDO ENTREGUE' : isAccepted ? 'PEDIDO ACEITO' : 'PEDIDO RECEBIDO — AGUARDANDO CONFIRMAÇÃO';
     const productSubtotal = (order.order_items || []).reduce((sum, item) => sum + (Number(item.unit_price_cents) * Number(item.quantity)), 0);
     const separator = '━━━━━━━━━━━━━━━━━━━━';
     const whatsappItems = (order.order_items || []).map(item => {
@@ -868,8 +871,9 @@ async function loadDeliveryOrders() {
       <div class="product-actions" style="margin-top:12px">
         ${isPending ? `
           <button class="primary" type="button" data-order-accept="${order.id}">Aceitar pedido</button>
-          <button class="danger" type="button" data-order-reject="${order.id}">Recusar pedido</button>
+          <button class="danger" type="button" data-order-reject="${order.id}">Cancelar pedido</button>
         ` : ''}
+        ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">Marcar como entregue</button>` : ''}
         ${whatsappUrl ? `<a class="secondary" style="display:inline-block;text-decoration:none;text-align:center" href="${escapeHTML(whatsappUrl)}" target="_blank" rel="noopener noreferrer">Enviar WhatsApp</a>` : '<span class="small">Telefone inválido para WhatsApp</span>'}
       </div>`;
 
@@ -890,14 +894,29 @@ async function loadDeliveryOrders() {
         ${rejection}
         ${actions}
       </article>`;
-  }).join('');
+  };
+  const activeOrders = data.filter(order => !['ENTREGUE', 'CANCELADO'].includes(order.status));
+  const historyOrders = data.filter(order => ['ENTREGUE', 'CANCELADO'].includes(order.status));
+  $('deliveryOrderList').innerHTML = activeOrders.length ? activeOrders.map(renderOrder).join('') : '<p class="muted">Nenhum pedido em andamento.</p>';
+  $('deliveryOrderHistory').innerHTML = historyOrders.length ? historyOrders.map(renderOrder).join('') : '<p class="muted">Ainda não há pedidos no histórico.</p>';
 }
 
 $('deliveryOrderList').addEventListener('click', async (event) => {
   const acceptButton = event.target.closest('[data-order-accept]');
   const rejectButton = event.target.closest('[data-order-reject]');
+  const deliverButton = event.target.closest('[data-order-deliver]');
+  if (deliverButton) {
+    if (!confirm('Confirma que este pedido foi entregue?')) return;
+    deliverButton.disabled = true;
+    const { data, error } = await supabase.from('orders').update({status:'ENTREGUE'})
+      .eq('id', deliverButton.dataset.orderDeliver)
+      .in('status', ['APROVADO','ENVIADO_IMPRESSAO','IMPRESSO','FALHA_IMPRESSAO']).select('id');
+    if (error || !data?.length) { alert('Não foi possível finalizar: ' + (error?.message || 'pedido já alterado.')); await loadDeliveryOrders(); return; }
+    alert('Pedido entregue e enviado ao histórico.');
+    await loadDeliveryOrders();
+    return;
+  }
   if (!acceptButton && !rejectButton) return;
-
   const button = acceptButton || rejectButton;
   const orderId = button.dataset.orderAccept || button.dataset.orderReject;
   let update;
