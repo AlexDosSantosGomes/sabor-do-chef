@@ -758,7 +758,7 @@ async function loadDeliveryOrders() {
 
   const { data, error } = await supabase
     .from('orders')
-    .select('id, order_number, status, customer_name, customer_phone, delivery_address, payment_method, total_cents, needs_change, change_for_cents, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes)')
+    .select('id, order_number, status, customer_name, customer_phone, delivery_address, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes)')
     .eq('order_type', 'DELIVERY')
     .order('created_at', { ascending: false })
     .limit(50);
@@ -774,7 +774,15 @@ async function loadDeliveryOrders() {
   }
 
   const paymentNames = { CASH: 'Dinheiro', PIX: 'Pix na entrega', CARD: 'Cartão na entrega' };
-  const statusNames = { RECEBIDO: 'Recebido', AGUARDANDO_APROVACAO: 'Aguardando aprovação', APROVADO: 'Aprovado', ENVIADO_IMPRESSAO: 'Enviado para impressão', IMPRESSO: 'Impresso', FALHA_IMPRESSAO: 'Falha na impressão', CANCELADO: 'Cancelado' };
+  const statusNames = {
+    RECEBIDO: 'Pendente de aprovação',
+    AGUARDANDO_APROVACAO: 'Pendente de aprovação',
+    APROVADO: 'Pedido aceito',
+    ENVIADO_IMPRESSAO: 'Pedido aceito',
+    IMPRESSO: 'Pedido aceito',
+    FALHA_IMPRESSAO: 'Pedido aceito',
+    CANCELADO: 'Pedido recusado'
+  };
 
   list.innerHTML = data.map(order => {
     const date = new Date(order.created_at).toLocaleString('pt-BR');
@@ -784,6 +792,16 @@ async function loadDeliveryOrders() {
     const change = order.needs_change
       ? `<div><strong>Troco para:</strong> ${money(order.change_for_cents)}</div>`
       : '';
+    const isPending = ['RECEBIDO', 'AGUARDANDO_APROVACAO'].includes(order.status);
+    const rejection = order.status === 'CANCELADO' && order.cancellation_reason
+      ? `<div class="message error"><strong>Motivo da recusa:</strong> ${escapeHTML(order.cancellation_reason)}</div>`
+      : '';
+    const actions = isPending ? `
+      <div class="product-actions" style="margin-top:12px">
+        <button class="primary" type="button" data-order-accept="${order.id}">Aceitar pedido</button>
+        <button class="danger" type="button" data-order-reject="${order.id}">Recusar pedido</button>
+      </div>` : '';
+
     return `
       <article class="order-card">
         <div class="order-head">
@@ -798,9 +816,66 @@ async function loadDeliveryOrders() {
         ${change}
         <ul class="order-items">${items}</ul>
         <div class="order-total">Total: ${money(order.total_cents)} · Entrega grátis</div>
+        ${rejection}
+        ${actions}
       </article>`;
   }).join('');
 }
+
+$('deliveryOrderList').addEventListener('click', async (event) => {
+  const acceptButton = event.target.closest('[data-order-accept]');
+  const rejectButton = event.target.closest('[data-order-reject]');
+  if (!acceptButton && !rejectButton) return;
+
+  const button = acceptButton || rejectButton;
+  const orderId = button.dataset.orderAccept || button.dataset.orderReject;
+  let update;
+
+  if (acceptButton) {
+    if (!confirm('Confirma que deseja ACEITAR este pedido?')) return;
+    update = {
+      status: 'APROVADO',
+      approved_by: currentUser.id,
+      approved_at: new Date().toISOString(),
+      cancellation_reason: null,
+      cancelled_at: null
+    };
+  } else {
+    const reason = prompt('Informe o motivo da recusa do pedido:');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      alert('Informe o motivo da recusa para continuar.');
+      return;
+    }
+    update = {
+      status: 'CANCELADO',
+      cancellation_reason: reason.trim(),
+      cancelled_at: new Date().toISOString()
+    };
+  }
+
+  button.disabled = true;
+  const { data, error } = await supabase
+    .from('orders')
+    .update(update)
+    .eq('id', orderId)
+    .in('status', ['RECEBIDO', 'AGUARDANDO_APROVACAO'])
+    .select('id');
+
+  if (error) {
+    alert('Não foi possível atualizar o pedido: ' + error.message);
+    button.disabled = false;
+    return;
+  }
+  if (!data || data.length === 0) {
+    alert('Este pedido já foi atualizado. Atualize a lista.');
+    await loadDeliveryOrders();
+    return;
+  }
+
+  alert(acceptButton ? 'Pedido aceito com sucesso!' : 'Pedido recusado e motivo registrado.');
+  await loadDeliveryOrders();
+});
 
 $('refreshOrdersBtn').addEventListener('click', loadDeliveryOrders);
 
