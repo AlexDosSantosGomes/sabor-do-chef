@@ -758,7 +758,7 @@ async function loadDeliveryOrders() {
 
   const { data, error } = await supabase
     .from('orders')
-    .select('id, order_number, status, customer_name, customer_phone, delivery_address, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes)')
+    .select('id, order_number, status, customer_name, customer_phone, delivery_address, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes, order_item_accompaniments(accompaniment_name, unit_index))')
     .eq('order_type', 'DELIVERY')
     .order('created_at', { ascending: false })
     .limit(50);
@@ -798,11 +798,47 @@ async function loadDeliveryOrders() {
       : '';
     const phone = String(order.customer_phone || '').replace(/\D/g, '');
     const whatsappPhone = phone ? (phone.startsWith('55') ? phone : '55' + phone) : '';
-    const whatsappMessage = order.status === 'CANCELADO'
-      ? `Olá, ${order.customer_name}! Sobre seu pedido #${order.order_number}: infelizmente não foi possível aceitar o pedido. Motivo: ${order.cancellation_reason || 'entre em contato conosco para mais informações'}.`
-      : ['APROVADO', 'ENVIADO_IMPRESSAO', 'IMPRESSO', 'FALHA_IMPRESSAO'].includes(order.status)
-        ? `Olá, ${order.customer_name}! Seu pedido #${order.order_number} foi aceito pelo Sabor do Chef e já está sendo preparado. Obrigado pela preferência!`
-        : `Olá, ${order.customer_name}! Recebemos seu pedido #${order.order_number} no Sabor do Chef. Em breve confirmaremos a aprovação. Obrigado!`;
+    const isAccepted = ['APROVADO', 'ENVIADO_IMPRESSAO', 'IMPRESSO', 'FALHA_IMPRESSAO'].includes(order.status);
+    const orderStatusText = order.status === 'CANCELADO'
+      ? 'PEDIDO RECUSADO'
+      : isAccepted ? 'PEDIDO ACEITO — EM PREPARAÇÃO' : 'PEDIDO RECEBIDO — AGUARDANDO CONFIRMAÇÃO';
+    const productSubtotal = (order.order_items || []).reduce((sum, item) => sum + (Number(item.unit_price_cents) * Number(item.quantity)), 0);
+    const whatsappItems = (order.order_items || []).map(item => {
+      const accompaniments = item.order_item_accompaniments || [];
+      const unitLines = Array.from({ length: Number(item.quantity) || 0 }, (_, index) => {
+        const selected = accompaniments
+          .filter(a => Number(a.unit_index) === index)
+          .map(a => a.accompaniment_name);
+        return selected.length ? `   Acompanhamentos da unidade ${index + 1}: ${selected.join(', ')}` : '';
+      }).filter(Boolean);
+      return `• ${Number(item.quantity)}x ${item.product_name_snapshot} — ${money(Number(item.unit_price_cents) * Number(item.quantity))}${item.notes ? `\\n   Observação: ${item.notes}` : ''}${unitLines.length ? '\\n' + unitLines.join('\\n') : ''}`;
+    }).join('\\n');
+    const whatsappMessage = [
+      `Olá, ${order.customer_name}! 👋`,
+      '',
+      `*SABOR DO CHEF — ${orderStatusText}*`,
+      `Pedido: #${order.order_number}`,
+      `Data: ${date}`,
+      '',
+      '*DADOS DO CLIENTE*',
+      `Nome: ${order.customer_name}`,
+      `Telefone: ${order.customer_phone || 'Não informado'}`,
+      `Endereço: ${order.delivery_address || 'Não informado'}`,
+      '',
+      '*PAGAMENTO*',
+      `Forma de pagamento: ${paymentNames[order.payment_method] || order.payment_method || 'Não informado'}`,
+      order.needs_change ? `Troco para: ${money(order.change_for_cents)}` : '',
+      '',
+      '*RESUMO DO PEDIDO*',
+      whatsappItems || 'Itens não disponíveis',
+      '',
+      `Valor dos produtos: ${money(productSubtotal)}`,
+      'Entrega: GRÁTIS',
+      `*TOTAL A PAGAR: ${money(order.total_cents)}*`,
+      order.status === 'CANCELADO' ? `Motivo da recusa: ${order.cancellation_reason || 'Entre em contato conosco para mais informações.'}` : '',
+      '',
+      'Agradecemos por escolher o Sabor do Chef! ❤️'
+    ].filter(line => line !== null && line !== undefined).join('\\n');
     const whatsappUrl = whatsappPhone
       ? 'https://wa.me/' + whatsappPhone + '?text=' + encodeURIComponent(whatsappMessage)
       : '';
