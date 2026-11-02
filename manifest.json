@@ -1,0 +1,9 @@
+{
+  "name": "Sabor do Chef",
+  "short_name": "Sabor do Chef",
+  "start_url": "./cardapio-com-logo-atualizado.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#b5121b"
+}
