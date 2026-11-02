@@ -38,7 +38,7 @@ input,textarea,select{width:100%;border:1px solid #d7d7d7;border-radius:9px;padd
 <div class="layout"><section><div id="products" class="products"><div class="loading">Carregando produtos…</div></div></section>
 <aside class="cart" id="cart"><h2>Seu pedido <span id="count">0</span></h2><div id="cart-items" class="small">Seu carrinho está vazio.</div>
 <div class="totals"><div class="line"><span>Produtos</span><b id="subtotal">R$ 0,00</b></div><div class="line"><span>Entrega</span><b class="free">Grátis</b></div><div class="line total">< span>Total</span><span id="total">R$ 0,00</span></div></div>
-<div id="push-box" style="margin:14px 0;padding:12px;border:1px solid #ddd;border-radius:12px"><strong>Receba avisos do seu pedido</strong><p style="margin:6px 0;font-size:13px">Ative as notificações para saber quando seu pedido for aceito ou recusado.</p><button type="button" id="enable-push" class="btn secondary">Ativar notificações</button><span id="push-status" role="status" style="display:block;font-size:12px;margin-top:6px"></span></div><form id="checkout"><h2>Dados para entrega</h2>
+<form id="checkout"><h2>Dados para entrega</h2>
 <label for="customer-name">Nome</label><input id="customer-name" maxlength="100" required autocomplete="name" placeholder="Seu nome">
 <label for="customer-phone">Telefone com DDD</label><input id="customer-phone" maxlength="25" required inputmode="tel" autocomplete="tel" placeholder="(21) 99999-9999">
 <label for="address">Endereço completo</label><textarea id="address" maxlength="300" required autocomplete="street-address" placeholder="Rua, número, complemento, bairro e referência"></textarea>
@@ -62,8 +62,7 @@ const $=id=>document.getElementById(id), money=c=>(c/100).toLocaleString('pt-BR'
 const VAPID_PUBLIC_KEY='BIgr6BkiyOkvhJDxuLQzyMl0tgBsDH82KsQciYF41a2rJ7WsRtPluX4kgtHJthctbK4sOV2ujKteF_zjLp0cIjg';let pushSubscription=null;
 function urlBase64ToUint8Array(v){const p='='.repeat((4-v.length%4)%4),r=atob((v+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...r].map(c=>c.charCodeAt(0)));}
 async function loadPushSubscription(){if(!('serviceWorker'in navigator)||!('PushManager'in window))return null;const r=await navigator.serviceWorker.register('./sw.js');pushSubscription=await r.pushManager.getSubscription();return pushSubscription;}
-$('enable-push').addEventListener('click',async()=>{const s=$('push-status'),b=$('enable-push');b.disabled=true;try{if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window))throw Error('Este navegador não oferece suporte a notificações push.');if(!window.isSecureContext)throw Error('Abra o cardápio pelo endereço HTTPS.');const p=await Notification.requestPermission();if(p!=='granted')throw Error('Permissão não concedida. Ative nas configurações do navegador.');const r=await navigator.serviceWorker.register('./sw.js');pushSubscription=await r.pushManager.getSubscription();if(!pushSubscription)pushSubscription=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});s.textContent='Notificações ativadas neste aparelho.';b.textContent='Notificações ativadas';}catch(e){s.textContent=e.message||'Não foi possível ativar as notificações.';}finally{b.disabled=false;}});
-loadPushSubscription().then(x=>{if(x){pushSubscription=x;$('push-status').textContent='Este aparelho já está inscrito para receber avisos.';$('enable-push').textContent='Notificações ativadas';}}).catch(()=>{});
+loadPushSubscription().then(x=>{if(x)pushSubscription=x;}).catch(()=>{});
 
 
 let products=[],categories=[],category='all',cart=new Map(),accompaniments=new Map(),pendingProduct=null;
