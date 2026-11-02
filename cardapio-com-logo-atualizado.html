@@ -152,7 +152,7 @@ $('checkout').onsubmit=async e=>{
  const button=$('submit');button.disabled=true;button.textContent='Enviando pedido…';
  try{
   const {data,error}=await supabase.functions.invoke('create-delivery-order',{body:payload});
-  if(error)throw new Error(error.message||'Falha ao enviar pedido.');
+  if(error){let detail=error.message||'Falha ao enviar pedido.';try{const response=error.context;if(response&&typeof response.clone==='function'){const body=await response.clone().json();if(body?.error)detail=body.error}}catch{}throw new Error(detail)}
   if(!data?.success)throw new Error(data?.error||'Não foi possível confirmar o pedido.');
   cart.clear();drawCart();$('checkout').reset();$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');
   message('Pedido nº '+data.order_number+' recebido! Total: '+money(data.total_cents)+'. Pagamento na entrega.','success');
