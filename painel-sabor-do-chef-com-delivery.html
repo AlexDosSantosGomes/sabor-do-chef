@@ -809,51 +809,51 @@ async function loadDeliveryOrders() {
         const selected = accompaniments
           .filter(a => Number(a.unit_index) === index)
           .map(a => a.accompaniment_name);
-        return selected.length ? \`   Acompanhamentos: \${selected.join(', ')}\` : '';
+        return selected.length ? `   Acompanhamentos: \${selected.join(', ')}` : '';
       }).filter(Boolean);
       const details = [
-        item.notes ? \`   Observação: \${item.notes}\` : '',
+        item.notes ? `   Observação: \${item.notes}` : '',
         ...unitLines
       ].filter(Boolean);
       return [
-        \`• \${Number(item.quantity)}x \${item.product_name_snapshot}\`,
-        \`  Valor: \${money(Number(item.unit_price_cents) * Number(item.quantity))}\`,
+        `• \${Number(item.quantity)}x \${item.product_name_snapshot}`,
+        `  Valor: \${money(Number(item.unit_price_cents) * Number(item.quantity))}`,
         ...details
-      ].join('\\n');
-    }).join('\\n\\n');
+      ].join('\n');
+    }).join('\n\n');
 
     const whatsappMessage = [
-      \`Olá, \${order.customer_name}! Tudo bem?\`,
+      `Olá, \${order.customer_name}! Tudo bem?`,
       '',
       '━━━━━━━━━━━━━━━━━━━━',
       '          SABOR DO CHEF',
-      \`       \${orderStatusText}\`,
+      `       \${orderStatusText}`,
       '━━━━━━━━━━━━━━━━━━━━',
       '',
-      \`Pedido nº: #\${order.order_number}\`,
-      \`Data: \${date}\`,
+      `Pedido nº: #\${order.order_number}`,
+      `Data: \${date}`,
       '',
       'DADOS DO CLIENTE',
-      \`Nome: \${order.customer_name}\`,
-      \`Telefone: \${order.customer_phone || 'Não informado'}\`,
-      \`Endereço: \${order.delivery_address || 'Não informado'}\`,
+      `Nome: \${order.customer_name}`,
+      `Telefone: \${order.customer_phone || 'Não informado'}`,
+      `Endereço: \${order.delivery_address || 'Não informado'}`,
       '',
       'PAGAMENTO',
-      \`Forma: \${paymentNames[order.payment_method] || order.payment_method || 'Não informado'}\`,
-      order.needs_change ? \`Troco para: \${money(order.change_for_cents)}\` : '',
+      `Forma: \${paymentNames[order.payment_method] || order.payment_method || 'Não informado'}`,
+      order.needs_change ? `Troco para: \${money(order.change_for_cents)}` : '',
       '',
       'ITENS DO PEDIDO',
       whatsappItems || 'Itens não disponíveis',
       '',
       'RESUMO FINANCEIRO',
-      \`Produtos: \${money(productSubtotal)}\`,
+      `Produtos: \${money(productSubtotal)}`,
       'Taxa de entrega: GRÁTIS',
-      \`TOTAL A PAGAR: \${money(order.total_cents)}\`,
-      order.status === 'CANCELADO' ? \`Motivo da recusa: \${order.cancellation_reason || 'Entre em contato conosco para mais informações.'}\` : '',
+      `TOTAL A PAGAR: \${money(order.total_cents)}`,
+      order.status === 'CANCELADO' ? `Motivo da recusa: \${order.cancellation_reason || 'Entre em contato conosco para mais informações.'}` : '',
       '',
       'Agradecemos pela preferência!',
       'Sabor do Chef ❤️'
-    ].filter(line => line !== null && line !== undefined && line !== '').join('\\n');\n    const whatsappUrl = whatsappPhone
+    ].filter(line => line !== null && line !== undefined && line !== '').join('\n');\n    const whatsappUrl = whatsappPhone
       ? 'https://wa.me/' + whatsappPhone + '?text=' + encodeURIComponent(whatsappMessage)
       : '';
     const actions = `
