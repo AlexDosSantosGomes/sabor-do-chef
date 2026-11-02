@@ -85,7 +85,7 @@ async function load(){
   return;
  }
  const allowedCategories=['quentinha','quentinhas','bebida','bebidas','sobremesa','sobremesas','porcao','porcoes'];
- const normalizeCategory=name=>String(name||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();
+ const normalizeCategory=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
  const visibleCategories=(c.data||[]).filter(x=>allowedCategories.includes(normalizeCategory(x.name)));
  const visibleIds=new Set(visibleCategories.map(x=>x.id));
  categories=visibleCategories;products=(p.data||[]).filter(x=>visibleIds.has(x.category_id));accompaniments=new Map();(a.data||[]).forEach(x=>{if(!accompaniments.has(x.product_id))accompaniments.set(x.product_id,[]);accompaniments.get(x.product_id).push(x.name)});drawCategories();drawProducts();
