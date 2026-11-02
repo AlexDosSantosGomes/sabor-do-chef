@@ -286,6 +286,20 @@ button {
   </section>
 
   <section class="panel">
+    <h2>Acompanhamentos dos pratos</h2>
+    <p class="muted">Cadastre até 2 opções ativas para cada prato. O cliente poderá escolher no cardápio.</p>
+    <label for="accompProduct">Prato</label>
+    <select id="accompProduct"><option value="">Selecione um prato</option></select>
+    <form id="accompForm">
+      <label for="accompName">Nome do acompanhamento</label>
+      <input id="accompName" maxlength="80" required placeholder="Ex.: Batata frita">
+      <button class="primary" type="submit" style="margin-top:12px">Adicionar acompanhamento</button>
+      <div id="accompMessage" class="message"></div>
+    </form>
+    <div id="accompList" class="product-list" style="margin-top:14px">Selecione um prato para ver os acompanhamentos.</div>
+  </section>
+
+  <section class="panel">
     <div class="toolbar" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
       <h2 style="margin:0">Pedidos de delivery</h2>
       <button class="secondary" id="refreshOrdersBtn" type="button">Atualizar pedidos</button>
@@ -382,6 +396,7 @@ async function startApp(user) {
     showApp();
     await loadCategories();
     await loadProducts();
+    await loadAccompaniments();
     await loadDeliveryOrders();
   } catch (error) {
     await supabase.auth.signOut();
@@ -635,6 +650,126 @@ $('productForm').addEventListener('submit', async (event) => {
       : 'Produto salvo com sucesso!', 'success');
 
   await loadProducts();
+});
+
+async function loadAccompaniments() {
+  const select = $('accompProduct');
+  const previous = select.value;
+  select.innerHTML = '<option value="">Selecione um prato</option>' +
+    products.map(p => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('');
+  if (products.some(p => p.id === previous)) select.value = previous;
+  await renderAccompaniments();
+}
+
+async function renderAccompaniments() {
+  const productId = $('accompProduct').value;
+  const list = $('accompList');
+  if (!productId) {
+    list.textContent = 'Selecione um prato para ver os acompanhamentos.';
+    return;
+  }
+  list.textContent = 'Carregando acompanhamentos...';
+  const { data, error } = await supabase
+    .from('product_accompaniments')
+    .select('id, name, active, sort_order')
+    .eq('product_id', productId)
+    .order('sort_order')
+    .order('name');
+  if (error) {
+    list.textContent = 'Erro ao carregar acompanhamentos: ' + error.message;
+    return;
+  }
+  const rows = data || [];
+  const activeCount = rows.filter(x => x.active).length;
+  if (!rows.length) {
+    list.innerHTML = '<p class="muted">Nenhum acompanhamento cadastrado para este prato.</p>';
+  } else {
+    list.innerHTML = rows.map(item => `
+      <article class="product">
+        <div class="product-info">
+          <strong>${escapeHTML(item.name)}</strong>
+          <span class="status ${item.active ? '' : 'off'}">${item.active ? 'Ativo' : 'Inativo'}</span>
+        </div>
+        <div class="product-actions">
+          <button class="${item.active ? 'danger' : 'secondary'}" type="button" data-accomp-toggle="${item.id}" data-active="${item.active}">
+            ${item.active ? 'Desativar' : 'Ativar'}
+          </button>
+        </div>
+      </article>`).join('');
+  }
+  $('accompMessage').textContent = 'Opções ativas: ' + activeCount + ' de 2.';
+  $('accompMessage').className = 'message';
+}
+
+$('accompProduct').addEventListener('change', renderAccompaniments);
+
+$('accompForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const productId = $('accompProduct').value;
+  const name = $('accompName').value.trim();
+  if (!productId) {
+    showMessage('accompMessage', 'Selecione um prato primeiro.', 'error');
+    return;
+  }
+  if (!name) return;
+  const { data: existing, error: readError } = await supabase
+    .from('product_accompaniments')
+    .select('id, active, sort_order')
+    .eq('product_id', productId)
+    .order('sort_order');
+  if (readError) {
+    showMessage('accompMessage', 'Erro ao verificar opções: ' + readError.message, 'error');
+    return;
+  }
+  if ((existing || []).filter(x => x.active).length >= 2) {
+    showMessage('accompMessage', 'Este prato já possui 2 acompanhamentos ativos. Desative um antes de adicionar outro.', 'error');
+    return;
+  }
+  if ((existing || []).some(x => x.name?.toLowerCase() === name.toLowerCase())) {
+    showMessage('accompMessage', 'Esse acompanhamento já está cadastrado para este prato.', 'error');
+    return;
+  }
+  const nextOrder = Math.max(0, ...(existing || []).map(x => Number(x.sort_order) || 0)) + 1;
+  const { error } = await supabase.from('product_accompaniments').insert({
+    product_id: productId, name, active: true, sort_order: nextOrder
+  });
+  if (error) {
+    showMessage('accompMessage', 'Erro ao salvar: ' + error.message, 'error');
+    return;
+  }
+  $('accompName').value = '';
+  showMessage('accompMessage', 'Acompanhamento cadastrado!', 'success');
+  await renderAccompaniments();
+});
+
+$('accompList').addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-accomp-toggle]');
+  if (!button) return;
+  const id = button.dataset.accompToggle;
+  const currentlyActive = button.dataset.active === 'true';
+  if (!currentlyActive) {
+    const productId = $('accompProduct').value;
+    const { data, error } = await supabase
+      .from('product_accompaniments')
+      .select('id')
+      .eq('product_id', productId)
+      .eq('active', true);
+    if (error) {
+      showMessage('accompMessage', 'Erro ao verificar opções: ' + error.message, 'error');
+      return;
+    }
+    if ((data || []).length >= 2) {
+      showMessage('accompMessage', 'Este prato já possui 2 opções ativas.', 'error');
+      return;
+    }
+  }
+  const { error } = await supabase.from('product_accompaniments')
+    .update({ active: !currentlyActive }).eq('id', id);
+  if (error) {
+    showMessage('accompMessage', 'Erro ao atualizar: ' + error.message, 'error');
+    return;
+  }
+  await renderAccompaniments();
 });
 
 async function loadDeliveryOrders() {
