@@ -130,7 +130,8 @@ async function load(){
  const normalizeCategory=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
  const visibleCategories=(c.data||[]).filter(x=>allowedCategories.includes(normalizeCategory(x.name)));
  const categoryOrder=['quentinha','porcao','sobremesa','bebida'];
- visibleCategories.sort((x,y)=>categoryOrder.indexOf(normalizeCategory(x.name).replace(/s$/,''))-categoryOrder.indexOf(normalizeCategory(y.name).replace(/s$/,'')));
+ const categoryKey=name=>{const n=normalizeCategory(name);if(n==='quentinha'||n==='quentinhas')return 'quentinha';if(n==='porcao'||n==='porcoes')return 'porcao';if(n==='sobremesa'||n==='sobremesas')return 'sobremesa';if(n==='bebida'||n==='bebidas')return 'bebida';return n;};
+ visibleCategories.sort((x,y)=>{const ix=categoryOrder.indexOf(categoryKey(x.name));const iy=categoryOrder.indexOf(categoryKey(y.name));return (ix<0?999:ix)-(iy<0?999:iy);});
  const visibleIds=new Set(visibleCategories.map(x=>x.id));
  categories=visibleCategories;products=(p.data||[]).filter(x=>visibleIds.has(x.category_id));accompaniments=new Map();(a.data||[]).forEach(x=>{if(!accompaniments.has(x.product_id))accompaniments.set(x.product_id,[]);accompaniments.get(x.product_id).push(x.name)});drawCategories();drawProducts();
 }
