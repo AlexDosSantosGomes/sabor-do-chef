@@ -174,6 +174,11 @@ async function refreshStoreStatus(){
  const banner=$('store-closed-banner');
  if(banner){banner.style.display=storeIsOpen?'none':'block';if(!storeIsOpen)banner.firstChild.textContent=data?.closed_message||'Estamos fechados no momento. Voltaremos em breve.'}
  document.body.classList.toggle('store-closed',!storeIsOpen);
+ document.querySelectorAll('.products .product button').forEach(button=>{
+  button.disabled=!storeIsOpen;
+  if(!storeIsOpen)button.title='A loja está fechada no momento';
+  else button.removeAttribute('title');
+ });
  const submit=$('submit');if(submit)submit.disabled=!storeIsOpen;
  return storeIsOpen;
 }
