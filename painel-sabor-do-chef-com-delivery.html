@@ -1026,7 +1026,7 @@ async function loadDeliveryOrders() {
 
   const { data, error } = await supabase
     .from('orders')
-    .select('id, order_number, status, customer_name, customer_phone, delivery_address, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes, order_item_accompaniments(accompaniment_name, unit_index))')
+    .select('id, order_number, status, customer_name, customer_phone, delivery_address, customer_notes, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes, order_item_accompaniments(accompaniment_name, unit_index))')
     .eq('order_type', 'DELIVERY')
     .order('created_at', { ascending: false })
     .limit(100);
@@ -1113,6 +1113,10 @@ async function loadDeliveryOrders() {
       order.needs_change ? `Troco para: ${money(order.change_for_cents)}` : '',
       '',
       separator,
+      'OBSERVAÇÃO DO PEDIDO',
+      order.customer_notes || 'Nenhuma observação informada',
+      '',
+      separator,
       'ITENS DO PEDIDO',
       whatsappItems || 'Itens não disponíveis',
       '',
@@ -1153,6 +1157,7 @@ async function loadDeliveryOrders() {
         <div><strong>Cliente:</strong> ${escapeHTML(order.customer_name)}</div>
         <div><strong>Telefone:</strong> ${escapeHTML(order.customer_phone)}</div>
         <div><strong>Endereço:</strong> ${escapeHTML(order.delivery_address)}</div>
+        ${order.customer_notes ? `<div><strong>Observação do pedido:</strong> ${escapeHTML(order.customer_notes)}</div>` : ''}
         <div><strong>Pagamento:</strong> ${escapeHTML(paymentNames[order.payment_method] || order.payment_method || 'Não informado')}</div>
         ${change}
         <ul class="order-items">${items}</ul>
