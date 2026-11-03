@@ -1058,8 +1058,10 @@ async function loadDeliveryOrders() {
     const items = (order.order_items || []).map(item =>
       `<li>${Number(item.quantity)}x ${escapeHTML(item.product_name_snapshot)} — ${money(item.unit_price_cents * item.quantity)}${item.notes ? `<br><small>${escapeHTML(item.notes)}</small>` : ''}</li>`
     ).join('');
+    const changeAmount = order.needs_change ? Number(order.change_for_cents) : null;
+    const changeDue = order.needs_change ? changeAmount - Number(order.total_cents) : null;
     const change = order.needs_change
-      ? `<div><strong>Troco para:</strong> ${money(order.change_for_cents)}</div>`
+      ? `<div><strong>Cliente paga com:</strong> ${money(changeAmount)}</div><div><strong>Troco a devolver:</strong> ${money(changeDue)}</div>`
       : '';
     const isPending = ['RECEBIDO', 'AGUARDANDO_APROVACAO'].includes(order.status);
     const rejection = order.status === 'CANCELADO' && order.cancellation_reason
@@ -1110,7 +1112,8 @@ async function loadDeliveryOrders() {
       separator,
       'PAGAMENTO',
       `Forma: ${paymentNames[order.payment_method] || order.payment_method || 'Não informado'}`,
-      order.needs_change ? `Troco para: ${money(order.change_for_cents)}` : '',
+      order.needs_change ? `Cliente paga com: ${money(order.change_for_cents)}` : '',
+      order.needs_change ? `TROCO A DEVOLVER: ${money(Number(order.change_for_cents) - Number(order.total_cents))}` : '',
       '',
       separator,
       'OBSERVAÇÃO DO PEDIDO',
