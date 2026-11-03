@@ -1313,10 +1313,31 @@ async function loadFinancialReport() {
     const startIso = monthStart.toISOString();
     const endIso = nextMonth.toISOString();
     const todayKey = localDateKey(new Date());
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const tomorrowStart = new Date(todayStart);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const weekStart = new Date();
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    let weekRows = [];
+    let weekFrom = 0;
+    const weekPageSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('total_cents')
+        .eq('status', 'ENTREGUE')
+        .gte('created_at', weekStart.toISOString())
+        .lt('created_at', weekEnd.toISOString())
+        .range(weekFrom, weekFrom + weekPageSize - 1);
+      if (error) throw error;
+      weekRows = weekRows.concat(data || []);
+      if (!data || data.length < weekPageSize) break;
+      weekFrom += weekPageSize;
+    }
+    const weekRevenue = weekRows.reduce((sum, order) => sum + Number(order.total_cents || 0), 0);
+    const weekRangeLabel = weekStart.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) +
+      ' a ' + new Date(weekEnd.getTime() - 1).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
     let rows = [];
     let from = 0;
@@ -1347,6 +1368,7 @@ async function loadFinancialReport() {
 
     $('financeMetrics').innerHTML = [
       ['Faturamento de hoje', formatMoneyCents(todayRevenue)],
+      ['Faturamento da semana (' + weekRangeLabel + ')', formatMoneyCents(weekRevenue)],
       ['Faturamento de ' + monthName, formatMoneyCents(monthRevenue)],
       ['Pedidos entregues no mês', String(delivered.length)],
       ['Ticket médio do mês', formatMoneyCents(average)],
