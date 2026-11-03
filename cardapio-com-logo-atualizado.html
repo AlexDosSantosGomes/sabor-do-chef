@@ -109,6 +109,7 @@ body.success-screen #success-screen{display:block}
 <label for="customer-name">Nome</label><input id="customer-name" maxlength="100" required autocomplete="name" placeholder="Seu nome">
 <label for="customer-phone">Telefone com DDD</label><input id="customer-phone" maxlength="25" required inputmode="tel" autocomplete="tel" placeholder="(21) 99999-9999">
 <label for="address">Endereço completo</label><textarea id="address" maxlength="300" required autocomplete="street-address" placeholder="Rua, número, complemento, bairro e referência"></textarea>
+<label for="customer-notes">Observações do pedido (opcional)</label><textarea id="customer-notes" maxlength="300" rows="3" placeholder="Ex.: Não colocar cebola, enviar talheres..."></textarea><div class="small">Se tiver algum pedido especial, escreva aqui. (Até 300 caracteres)</div>
 <label for="payment">Forma de pagamento</label><select id="payment"><option value="CASH">Dinheiro</option><option value="PIX">Pix na entrega</option><option value="CARD">Cartão na entrega</option></select>
 <div id="change-area"><label class="check"><input type="checkbox" id="needs-change"> Precisa de troco?</label><div id="change-value" class="hidden"><label for="change-for">Troco para quanto? (R$)</label><input id="change-for" inputmode="decimal" placeholder="Ex.: 50,00"></div></div>
 <button class="btn submit" id="submit" type="submit">Confirmar pedido</button><div class="small">O pagamento será feito ao receber o pedido. Não há cobrança pelo site.</div><div id="message" class="message" role="status" aria-live="polite"></div>
@@ -265,7 +266,7 @@ $('checkout').onsubmit=async e=>{
  const payload={
   push_subscription:pushSubscription?pushSubscription.toJSON():null,
   customer_name:$('customer-name').value.trim(),customer_phone:$('customer-phone').value.trim(),
-  delivery_address:$('address').value.trim(),payment_method:payment,needs_change:needs,
+  delivery_address:$('address').value.trim(),customer_notes:$('customer-notes').value.trim(),payment_method:payment,needs_change:needs,
   change_for_cents:change,items:[...cart.entries()].map(([id,x])=>({product_id:id,quantity:x.units.length,accompaniments_by_unit:x.units}))
  };
  const button=$('submit');button.disabled=true;button.textContent='Enviando pedido…';
