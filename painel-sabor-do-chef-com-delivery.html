@@ -288,7 +288,14 @@ button:active{transform:translateY(1px)}
       <textarea id="description" rows="2"
         placeholder="Descrição do produto"></textarea>
 
-      <label for="photo">Endereço da foto (URL)</label>
+      <label for="photoFile">Foto do produto (galeria do celular)</label>
+      <input id="photoFile" type="file" accept="image/*">
+      <div class="muted" style="margin-top:6px">Escolha uma foto da câmera ou da galeria. A imagem será otimizada antes do envio.</div>
+      <div id="photoPreviewWrap" class="hidden" style="margin-top:12px">
+        <img id="photoPreview" alt="Pré-visualização da foto" style="display:block;width:100%;max-width:240px;max-height:190px;object-fit:cover;border-radius:10px;border:1px solid var(--border)">
+        <button id="removePhoto" class="secondary" type="button" style="margin-top:8px">Remover foto</button>
+      </div>
+      <label for="photo">Ou endereço da foto (URL)</label>
       <input id="photo" type="url" placeholder="https://...">
 
       <div class="checkline">
@@ -575,15 +582,87 @@ function renderProducts() {
 $('searchProduct').addEventListener('input', renderProducts);
 $('refreshBtn').addEventListener('click', loadProducts);
 
+function setPhotoPreview(url) {
+  const wrap = $('photoPreviewWrap');
+  if (url) {
+    $('photoPreview').src = url;
+    wrap.classList.remove('hidden');
+  } else {
+    $('photoPreview').removeAttribute('src');
+    wrap.classList.add('hidden');
+  }
+}
+
+$('photoFile').addEventListener('change', () => {
+  const file = $('photoFile').files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showMessage('productMessage', 'Selecione um arquivo de imagem.', 'error');
+    $('photoFile').value = '';
+    return;
+  }
+  setPhotoPreview(URL.createObjectURL(file));
+  $('photo').value = '';
+});
+
+$('removePhoto').addEventListener('click', () => {
+  $('photoFile').value = '';
+  $('photo').value = '';
+  setPhotoPreview('');
+});
+
 function resetForm() {
   $('productForm').reset();
   $('productId').value = '';
   $('stock').value = '0';
   $('active').checked = true;
+  setPhotoPreview('');
   $('formTitle').textContent = 'Cadastrar produto';
   $('saveBtn').textContent = 'Salvar produto';
   $('cancelEdit').classList.add('hidden');
   showMessage('productMessage', '');
+}
+
+async function optimizeProductImage(file) {
+  if (!file.type.startsWith('image/')) throw new Error('O arquivo selecionado não é uma imagem.');
+  if (file.size > 12 * 1024 * 1024) throw new Error('A foto deve ter no máximo 12 MB.');
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = objectUrl;
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = () => reject(new Error('Não foi possível abrir essa imagem.'));
+    });
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.82));
+    if (!blob) throw new Error('Não foi possível otimizar a foto.');
+    return new File([blob], 'produto.webp', { type: 'image/webp' });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function uploadProductPhoto(file) {
+  const optimized = await optimizeProductImage(file);
+  const filePath = 'produtos/' + crypto.randomUUID() + '.webp';
+  const { error } = await supabase.storage.from('product-images').upload(filePath, optimized, {
+    contentType: 'image/webp',
+    cacheControl: '31536000',
+    upsert: false
+  });
+  if (error) {
+    if (/bucket not found/i.test(error.message)) {
+      throw new Error('O armazenamento de fotos ainda não foi criado no Supabase. Crie o bucket público "product-images" em Storage e tente novamente.');
+    }
+    throw error;
+  }
+  return supabase.storage.from('product-images').getPublicUrl(filePath).data.publicUrl;
 }
 
 $('cancelEdit').addEventListener('click', resetForm);
@@ -603,6 +682,8 @@ $('productList').addEventListener('click', async (event) => {
     $('stock').value = product.stock_quantity;
     $('description').value = product.description || '';
     $('photo').value = product.photo_url || '';
+    $('photoFile').value = '';
+    setPhotoPreview(product.photo_url || '');
     $('active').checked = product.active;
 
     $('formTitle').textContent = 'Editar produto';
@@ -652,48 +733,48 @@ $('productForm').addEventListener('submit', async (event) => {
 
   const priceCents = Math.round(price * 100);
 
-  const payload = {
-    name,
-    category_id: categoryId,
-    description: $('description').value.trim() || null,
-    price_cents: priceCents,
-    photo_url: $('photo').value.trim() || null,
-    stock_quantity: stock,
-    active: stock > 0 && $('active').checked
-  };
-
   const id = $('productId').value;
   $('saveBtn').disabled = true;
   showMessage('productMessage', 'Salvando produto...');
 
-  let result;
+  try {
+    let photoUrl = $('photo').value.trim() || null;
+    const selectedFile = $('photoFile').files?.[0];
+    if (selectedFile) {
+      showMessage('productMessage', 'Otimizando e enviando foto...');
+      photoUrl = await uploadProductPhoto(selectedFile);
+    }
 
-  if (id) {
-    result = await supabase
-      .from('products')
-      .update(payload)
-      .eq('id', id);
-  } else {
-    result = await supabase
-      .from('products')
-      .insert(payload);
-  }
+    const payload = {
+      name,
+      category_id: categoryId,
+      description: $('description').value.trim() || null,
+      price_cents: priceCents,
+      photo_url: photoUrl,
+      stock_quantity: stock,
+      active: stock > 0 && $('active').checked
+    };
 
-  $('saveBtn').disabled = false;
+    let result;
+    if (id) {
+      result = await supabase.from('products').update(payload).eq('id', id);
+    } else {
+      result = await supabase.from('products').insert(payload);
+    }
 
-  if (result.error) {
+    if (result.error) throw result.error;
+
+    resetForm();
     showMessage('productMessage',
-      'Erro ao salvar: ' + result.error.message, 'error');
-    return;
+      stock === 0
+        ? 'Produto salvo como inativo porque o estoque está zerado.'
+        : 'Produto salvo com sucesso!', 'success');
+    await loadProducts();
+  } catch (error) {
+    showMessage('productMessage', 'Erro ao salvar: ' + (error.message || error), 'error');
+  } finally {
+    $('saveBtn').disabled = false;
   }
-
-  resetForm();
-  showMessage('productMessage',
-    stock === 0
-      ? 'Produto salvo como inativo porque o estoque está zerado.'
-      : 'Produto salvo com sucesso!', 'success');
-
-  await loadProducts();
 });
 
 async function loadAccompaniments() {
