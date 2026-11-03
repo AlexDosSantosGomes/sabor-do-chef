@@ -7,6 +7,17 @@
 <title>Sabor do Chef | Administração</title>
 
 <style>
+/* Navegação por áreas: reduz a rolagem do painel */
+#adminNavigation{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;padding:10px;background:#fff;border:1px solid #e9eaf0;border-radius:14px;box-shadow:0 5px 18px #20263808}
+#adminNavigation button{flex:1 1 130px;min-height:44px;background:#f1f2f5;color:#454b57;border:1px solid #e5e7ec}
+#adminNavigation button[aria-selected="true"]{background:linear-gradient(135deg,#c51d27,#a90f19);color:#fff;border-color:#b5121b;box-shadow:0 4px 12px #b5121b20}
+#appScreen>.panel.admin-section-hidden{display:none!important}
+.history-details{margin-top:22px;border:1px solid #e9eaf0;border-radius:12px;background:#fff;overflow:hidden}
+.history-details>summary{cursor:pointer;padding:14px 16px;font-weight:800;color:#343944;background:#f7f7f9;list-style:none}
+.history-details>summary::-webkit-details-marker{display:none}
+.history-details>summary:after{content:"＋";float:right;color:#b5121b;font-size:18px}
+.history-details[open]>summary:after{content:"−"}
+.history-details .history-content{padding:14px}
 :root {
   --red: #b5121b;
   --dark: #850d14;
@@ -258,7 +269,13 @@ button:active{transform:translateY(1px)}
 
 <main id="appScreen" class="hidden">
 
-  <section class="panel">
+  <nav id="adminNavigation" aria-label="Seções do painel administrativo">
+    <button type="button" data-admin-tab="orders" aria-selected="true">Pedidos</button>
+    <button type="button" data-admin-tab="products" aria-selected="false">Produtos</button>
+    <button type="button" data-admin-tab="accompaniments" aria-selected="false">Acompanhamentos</button>
+  </nav>
+
+  <section class="panel" data-admin-section="products">
     <h2 id="formTitle">Cadastrar produto</h2>
 
     <form id="productForm">
@@ -323,7 +340,7 @@ button:active{transform:translateY(1px)}
     </form>
   </section>
 
-  <section class="panel">
+  <section class="panel" data-admin-section="products">
     <h2>Produtos cadastrados</h2>
 
     <div class="toolbar">
@@ -339,7 +356,7 @@ button:active{transform:translateY(1px)}
     </div>
   </section>
 
-  <section class="panel">
+  <section class="panel" data-admin-section="accompaniments">
     <h2>Acompanhamentos</h2>
     <p class="muted">Veja todos os acompanhamentos cadastrados em um só lugar. O botão Ativar/Desativar controla a opção em todos os pratos que usam o mesmo nome.</p>
     <h3 style="margin-top:16px">Lista geral de acompanhamentos</h3>
@@ -355,7 +372,7 @@ button:active{transform:translateY(1px)}
     </form>
   </section>
 
-  <section class="panel">
+  <section class="panel" data-admin-section="orders">
     <div class="toolbar" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
       <h2 style="margin:0">Pedidos de delivery</h2>
       <button class="secondary" id="refreshOrdersBtn" type="button">Atualizar pedidos</button>
@@ -368,7 +385,10 @@ button:active{transform:translateY(1px)}
     <div id="deliveryOrderAccepted" class="order-list"></div>
     <h3 style="margin-top:22px">Outros pedidos em andamento</h3>
     <div id="deliveryOrderList" class="order-list"></div>
-    <h3 style="margin-top:24px">Histórico de pedidos</h3>
+    <details class="history-details">
+      <summary>Histórico de pedidos</summary>
+      <div class="history-content">
+    <h3 style="margin-top:4px">Histórico de pedidos</h3>
     <p class="muted">Pesquise pedidos anteriores por número ou cliente e filtre pela situação.</p>
     <div class="toolbar" style="flex-wrap:wrap">
       <input id="historySearch" type="search" placeholder="Buscar por nº do pedido ou cliente..." aria-label="Buscar no histórico">
@@ -379,6 +399,8 @@ button:active{transform:translateY(1px)}
       </select>
     </div>
     <div id="deliveryOrderHistory" class="order-list">Carregando histórico...</div>
+      </div>
+    </details>
   </section>
 
 
@@ -1212,6 +1234,24 @@ $('historySearch').addEventListener('input', loadDeliveryOrders);
 $('historyStatus').addEventListener('change', loadDeliveryOrders);
 $('refreshOrdersBtn').addEventListener('click', loadDeliveryOrders);
 
+
+function setAdminSection(section) {
+  const validSections = ['orders', 'products', 'accompaniments'];
+  const activeSection = validSections.includes(section) ? section : 'orders';
+  document.querySelectorAll('[data-admin-section]').forEach(panel => {
+    const visible = panel.dataset.adminSection === activeSection;
+    panel.classList.toggle('admin-section-hidden', !visible);
+  });
+  document.querySelectorAll('[data-admin-tab]').forEach(button => {
+    button.setAttribute('aria-selected', String(button.dataset.adminTab === activeSection));
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+$('adminNavigation').addEventListener('click', event => {
+  const button = event.target.closest('[data-admin-tab]');
+  if (button) setAdminSection(button.dataset.adminTab);
+});
 
 async function restoreSession() {
   const { data, error } = await supabase.auth.getSession();
