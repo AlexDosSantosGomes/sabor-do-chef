@@ -333,17 +333,20 @@ button:active{transform:translateY(1px)}
   </section>
 
   <section class="panel">
-    <h2>Acompanhamentos dos pratos</h2>
-    <p class="muted">Cadastre os acompanhamentos de cada prato. Ao desativar uma opção, ela ficará indisponível em todos os pratos que tenham o mesmo acompanhamento. Você poderá ativá-la novamente quando quiser.</p>
+    <h2>Acompanhamentos</h2>
+    <p class="muted">Veja todos os acompanhamentos cadastrados em um só lugar. O botão Ativar/Desativar controla a opção em todos os pratos que usam o mesmo nome.</p>
+    <h3 style="margin-top:16px">Lista geral de acompanhamentos</h3>
+    <div id="accompList" class="product-list" style="margin-top:10px">Carregando acompanhamentos...</div>
+    <div id="accompMessage" class="message"></div>
+    <hr style="border:0;border-top:1px solid var(--border);margin:18px 0">
+    <h3>Adicionar acompanhamento a um prato</h3>
     <label for="accompProduct">Prato</label>
     <select id="accompProduct"><option value="">Selecione um prato</option></select>
     <form id="accompForm">
       <label for="accompName">Nome do acompanhamento</label>
       <input id="accompName" maxlength="80" required placeholder="Ex.: Batata frita">
       <button class="primary" type="submit" style="margin-top:12px">Adicionar acompanhamento</button>
-      <div id="accompMessage" class="message"></div>
     </form>
-    <div id="accompList" class="product-list" style="margin-top:14px">Selecione um prato para ver os acompanhamentos.</div>
   </section>
 
   <section class="panel">
@@ -787,59 +790,67 @@ async function loadAccompaniments() {
 }
 
 async function renderAccompaniments() {
-  const productId = $('accompProduct').value;
   const list = $('accompList');
-  if (!productId) {
-    list.textContent = 'Selecione um prato para ver os acompanhamentos.';
-    return;
-  }
   list.textContent = 'Carregando acompanhamentos...';
   const { data, error } = await supabase
     .from('product_accompaniments')
-    .select('id, name, active, sort_order')
-    .eq('product_id', productId)
-    .order('sort_order')
+    .select('id, name, active, product_id')
     .order('name');
   if (error) {
     list.textContent = 'Erro ao carregar acompanhamentos: ' + error.message;
     return;
   }
-  const rows = data || [];
-  const activeCount = rows.filter(x => x.active).length;
-  if (!rows.length) {
-    list.innerHTML = '<p class="muted">Nenhum acompanhamento cadastrado para este prato.</p>';
-  } else {
-    list.innerHTML = rows.map(item => `
+
+  const groups = new Map();
+  (data || []).forEach(item => {
+    const key = (item.name || '').trim().toLocaleLowerCase('pt-BR');
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, { name: item.name.trim(), rows: [] });
+    groups.get(key).rows.push(item);
+  });
+
+  const options = [...groups.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, 'pt-BR'));
+  if (!options.length) {
+    list.innerHTML = '<p class="muted">Nenhum acompanhamento cadastrado ainda.</p>';
+    return;
+  }
+
+  list.innerHTML = options.map(group => {
+    const allActive = group.rows.every(item => item.active === true);
+    const allInactive = group.rows.every(item => item.active !== true);
+    const status = allActive ? 'Ativo' : (allInactive ? 'Inativo' : 'Parcialmente ativo');
+    const productCount = new Set(group.rows.map(item => item.product_id)).size;
+    const ids = group.rows.map(item => item.id);
+    return `
       <article class="product">
         <div class="product-info">
-          <strong>${escapeHTML(item.name)}</strong>
-          <span class="status ${item.active ? '' : 'off'}">${item.active ? 'Ativo' : 'Inativo'}</span>
+          <strong>${escapeHTML(group.name)}</strong>
+          <span class="status ${allActive ? '' : 'off'}">${status}</span>
+          <small class="muted">Cadastrado em ${productCount} prato(s)</small>
         </div>
         <div class="product-actions">
-          <button class="${item.active ? 'danger' : 'secondary'}" type="button" data-accomp-toggle="${item.id}" data-active="${item.active}">
-            ${item.active ? 'Desativar' : 'Ativar'}
+          <button class="${allActive ? 'danger' : 'secondary'}" type="button"
+            data-accomp-ids="${ids.join(',')}" data-accomp-next="${allActive ? 'false' : 'true'}">
+            ${allActive ? 'Desativar' : 'Ativar'}
           </button>
         </div>
-      </article>`).join('');
-  }
-  $('accompMessage').textContent = 'Opções cadastradas e ativas: ' + activeCount + '. O cliente pode selecionar até 2 por prato.';
-  $('accompMessage').className = 'message';
+      </article>`;
+  }).join('');
 }
-
-$('accompProduct').addEventListener('change', renderAccompaniments);
 
 $('accompForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const productId = $('accompProduct').value;
   const name = $('accompName').value.trim();
   if (!productId) {
-    showMessage('accompMessage', 'Selecione um prato primeiro.', 'error');
+    showMessage('accompMessage', 'Selecione o prato onde deseja adicionar esse acompanhamento.', 'error');
     return;
   }
   if (!name) return;
   const { data: existing, error: readError } = await supabase
     .from('product_accompaniments')
-    .select('id, active, sort_order')
+    .select('id, name, active, sort_order')
     .eq('product_id', productId)
     .order('sort_order');
   if (readError) {
@@ -859,33 +870,21 @@ $('accompForm').addEventListener('submit', async (event) => {
     return;
   }
   $('accompName').value = '';
-  showMessage('accompMessage', 'Acompanhamento cadastrado!', 'success');
+  showMessage('accompMessage', 'Acompanhamento cadastrado e ativado!', 'success');
   await renderAccompaniments();
 });
 
 $('accompList').addEventListener('click', async (event) => {
-  const button = event.target.closest('[data-accomp-toggle]');
+  const button = event.target.closest('[data-accomp-ids]');
   if (!button) return;
-  const id = button.dataset.accompToggle;
-  const currentlyActive = button.dataset.active === 'true';
+  const ids = button.dataset.accompIds.split(',').filter(Boolean);
+  const nextActive = button.dataset.accompNext === 'true';
+  if (!ids.length) return;
   button.disabled = true;
 
-  // Busca o nome da opção e altera todas as ocorrências desse acompanhamento,
-  // independentemente do prato ao qual cada registro está vinculado.
-  const { data: item, error: readError } = await supabase
-    .from('product_accompaniments')
-    .select('name')
-    .eq('id', id)
-    .single();
-  if (readError || !item) {
-    button.disabled = false;
-    showMessage('accompMessage', 'Erro ao localizar acompanhamento: ' + (readError?.message || 'registro não encontrado.'), 'error');
-    return;
-  }
-
   const { error } = await supabase.from('product_accompaniments')
-    .update({ active: !currentlyActive })
-    .ilike('name', item.name);
+    .update({ active: nextActive })
+    .in('id', ids);
   if (error) {
     button.disabled = false;
     showMessage('accompMessage', 'Erro ao atualizar: ' + error.message, 'error');
@@ -893,8 +892,10 @@ $('accompList').addEventListener('click', async (event) => {
   }
 
   showMessage('accompMessage',
-    (currentlyActive ? 'Acompanhamento desativado' : 'Acompanhamento ativado') +
-    ' em todos os pratos que usam essa opção.', 'success');
+    nextActive
+      ? 'Acompanhamento ativado em todos os pratos que usam essa opção.'
+      : 'Acompanhamento desativado em todos os pratos que usam essa opção.',
+    'success');
   await renderAccompaniments();
 });
 
