@@ -339,13 +339,12 @@ button:active{transform:translateY(1px)}
     <div id="accompList" class="product-list" style="margin-top:10px">Carregando acompanhamentos...</div>
     <div id="accompMessage" class="message"></div>
     <hr style="border:0;border-top:1px solid var(--border);margin:18px 0">
-    <h3>Adicionar acompanhamento a um prato</h3>
-    <label for="accompProduct">Prato</label>
-    <select id="accompProduct"><option value="">Selecione um prato</option></select>
+    <h3>Adicionar acompanhamento a todos os pratos</h3>
+    <p class="muted">O novo acompanhamento será incluído automaticamente em todos os produtos da categoria Quentinha. Novas quentinhas cadastradas também receberão a lista existente.</p>
     <form id="accompForm">
       <label for="accompName">Nome do acompanhamento</label>
       <input id="accompName" maxlength="80" required placeholder="Ex.: Batata frita">
-      <button class="primary" type="submit" style="margin-top:12px">Adicionar acompanhamento</button>
+      <button class="primary" type="submit" style="margin-top:12px">Adicionar em todas as quentinhas</button>
     </form>
   </section>
 
@@ -762,10 +761,14 @@ $('productForm').addEventListener('submit', async (event) => {
     if (id) {
       result = await supabase.from('products').update(payload).eq('id', id);
     } else {
-      result = await supabase.from('products').insert(payload);
+      result = await supabase.from('products').insert(payload).select('id').single();
     }
 
     if (result.error) throw result.error;
+
+    if (!id && categories.find(category => category.id === categoryId)?.name?.trim().toLowerCase() === 'quentinha') {
+      await syncAccompanimentsToProduct(result.data.id);
+    }
 
     resetForm();
     showMessage('productMessage',
@@ -781,14 +784,39 @@ $('productForm').addEventListener('submit', async (event) => {
 });
 
 async function loadAccompaniments() {
-  const select = $('accompProduct');
-  const previous = select.value;
-  select.innerHTML = '<option value="">Selecione um prato</option>' +
-    products.map(p => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('');
-  if (products.some(p => p.id === previous)) select.value = previous;
   await renderAccompaniments();
 }
 
+async function syncAccompanimentsToProduct(productId) {
+  const { data, error } = await supabase
+    .from('product_accompaniments')
+    .select('name, active, sort_order');
+  if (error) throw error;
+
+  const groups = new Map();
+  (data || []).forEach(item => {
+    const name = (item.name || '').trim();
+    const key = name.toLocaleLowerCase('pt-BR');
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, { name, active: true, sort_order: Number(item.sort_order) || 0 });
+    const group = groups.get(key);
+    group.active = group.active && item.active === true;
+    group.sort_order = Math.max(group.sort_order, Number(item.sort_order) || 0);
+  });
+
+  const rows = [...groups.values()].map((item, index) => ({
+    product_id: productId,
+    name: item.name,
+    active: item.active,
+    sort_order: index + 1
+  }));
+  if (!rows.length) return;
+
+  const { error: insertError } = await supabase
+    .from('product_accompaniments')
+    .insert(rows);
+  if (insertError) throw insertError;
+}
 async function renderAccompaniments() {
   const list = $('accompList');
   list.textContent = 'Carregando acompanhamentos...';
@@ -841,36 +869,56 @@ async function renderAccompaniments() {
 
 $('accompForm').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const productId = $('accompProduct').value;
   const name = $('accompName').value.trim();
-  if (!productId) {
-    showMessage('accompMessage', 'Selecione o prato onde deseja adicionar esse acompanhamento.', 'error');
+  if (!name) return;
+
+  const quentinhaProducts = products.filter(product =>
+    product.categories?.name?.trim().toLowerCase() === 'quentinha');
+  if (!quentinhaProducts.length) {
+    showMessage('accompMessage', 'Não encontrei produtos na categoria Quentinha.', 'error');
     return;
   }
-  if (!name) return;
+
   const { data: existing, error: readError } = await supabase
     .from('product_accompaniments')
-    .select('id, name, active, sort_order')
-    .eq('product_id', productId)
-    .order('sort_order');
+    .select('product_id, name, sort_order')
+    .in('product_id', quentinhaProducts.map(product => product.id));
   if (readError) {
     showMessage('accompMessage', 'Erro ao verificar opções: ' + readError.message, 'error');
     return;
   }
-  if ((existing || []).some(x => x.name?.toLowerCase() === name.toLowerCase())) {
-    showMessage('accompMessage', 'Esse acompanhamento já está cadastrado para este prato.', 'error');
+
+  const matching = (existing || []).filter(item =>
+    item.name?.trim().toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'));
+  const alreadyEverywhere = quentinhaProducts.every(product =>
+    matching.some(item => item.product_id === product.id));
+  if (alreadyEverywhere) {
+    showMessage('accompMessage', 'Esse acompanhamento já está cadastrado em todas as quentinhas.', 'error');
     return;
   }
-  const nextOrder = Math.max(0, ...(existing || []).map(x => Number(x.sort_order) || 0)) + 1;
-  const { error } = await supabase.from('product_accompaniments').insert({
-    product_id: productId, name, active: true, sort_order: nextOrder
-  });
+
+  const rows = quentinhaProducts
+    .filter(product => !matching.some(item => item.product_id === product.id))
+    .map(product => {
+      const productRows = (existing || []).filter(item => item.product_id === product.id);
+      return {
+        product_id: product.id,
+        name,
+        active: true,
+        sort_order: Math.max(0, ...productRows.map(item => Number(item.sort_order) || 0)) + 1
+      };
+    });
+
+  const { error } = await supabase.from('product_accompaniments').insert(rows);
   if (error) {
     showMessage('accompMessage', 'Erro ao salvar: ' + error.message, 'error');
     return;
   }
+
   $('accompName').value = '';
-  showMessage('accompMessage', 'Acompanhamento cadastrado e ativado!', 'success');
+  showMessage('accompMessage',
+    'Acompanhamento adicionado e ativado em ' + quentinhaProducts.length + ' quentinha(s)!',
+    'success');
   await renderAccompaniments();
 });
 
