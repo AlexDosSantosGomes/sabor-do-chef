@@ -235,10 +235,11 @@ function drawProducts(){
   bottom.append(price,add);body.append(n,d,bottom);card.append(body);root.append(card);
  });
 }
+function isQuentinhaProduct(product){const productCategory=categories.find(item=>item.id===product?.category_id)?.name||'';const normalized=String(productCategory).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();return normalized==='quentinha'||normalized==='quentinhas'}
 function addItem(id){
  const p=products.find(x=>x.id===id);if(!p)return;
  const count=cart.get(id)?.units.length||0;if(count>=p.stock_quantity){alert('Limite de estoque atingido.');return}
- const options=accompaniments.get(id)||[];
+ const options=isQuentinhaProduct(p)?(accompaniments.get(id)||[]):[];
  if(!options.length){addUnit(p,[]);return}
  pendingProduct=p;$('accomp-options').innerHTML='';
  $('accomp-title').textContent='Acompanhamentos · '+p.name;
@@ -260,7 +261,7 @@ function drawCart(){
   const quantity=units.length;count+=quantity;total+=product.price_cents*quantity;
   const row=document.createElement('div');row.className='cartrow';
   const info=document.createElement('div');info.className='cart-product';const name=document.createElement('b');name.textContent=product.name;const sub=document.createElement('div');sub.className='small';sub.textContent=money(product.price_cents*quantity);info.append(name,sub);
-  units.forEach((choices,index)=>{const detail=document.createElement('div');detail.className='unit-detail';detail.textContent='Prato '+(index+1)+': '+(choices.length?choices.join(', '):'sem acompanhamentos');info.append(detail)});
+  if(isQuentinhaProduct(product)){units.forEach((choices,index)=>{if(!choices.length)return;const detail=document.createElement('div');detail.className='unit-detail';detail.textContent='Quentinha '+(index+1)+': '+choices.join(', ');info.append(detail)})}
   const controls=document.createElement('div');controls.className='cart-controls';
   const minus=document.createElement('button');minus.textContent='−';minus.setAttribute('aria-label','Remover um prato');minus.onclick=()=>qty(product.id,-1);
   const num=document.createElement('b');num.textContent=quantity;
@@ -292,7 +293,7 @@ $('checkout').onsubmit=async e=>{
   push_subscription:pushSubscription?pushSubscription.toJSON():null,
   customer_name:$('customer-name').value.trim(),customer_phone:$('customer-phone').value.trim(),
   delivery_address:$('address').value.trim(),customer_notes:$('customer-notes').value.trim(),payment_method:payment,needs_change:needs,
-  change_for_cents:change,items:[...cart.entries()].map(([id,x])=>({product_id:id,quantity:x.units.length,accompaniments_by_unit:x.units}))
+  change_for_cents:change,items:[...cart.entries()].map(([id,x])=>({product_id:id,quantity:x.units.length,accompaniments_by_unit:isQuentinhaProduct(x.product)?x.units:x.units.map(()=>[])}))
  };
  const button=$('submit');button.disabled=true;button.textContent='Enviando pedido…';
  try{
