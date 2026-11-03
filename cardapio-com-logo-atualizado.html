@@ -143,12 +143,22 @@ async function load(){
  categories=visibleCategories;products=(p.data||[]).filter(x=>visibleIds.has(x.category_id));accompaniments=new Map();(a.data||[]).forEach(x=>{if(!accompaniments.has(x.product_id))accompaniments.set(x.product_id,[]);accompaniments.get(x.product_id).push(x.name)});drawCategories();drawProducts();
 }
 function drawCategories(){
- $('categories').innerHTML='';
- const all=document.createElement('button');all.className='cat'+(category==='all'?' active':'');all.textContent='Geral';
- all.onclick=()=>{category='all';drawCategories();drawProducts()};$('categories').append(all);
+ const root=$('categories');
+ root.replaceChildren();
+ const all=document.createElement('button');
+ all.type='button';
+ all.className='cat'+(category==='all'?' active':'');
+ all.textContent='Geral';
+ all.setAttribute('aria-label','Mostrar todos os produtos');
+ all.onclick=()=>{category='all';drawCategories();drawProducts()};
+ root.appendChild(all);
  categories.forEach(c=>{
-  const b=document.createElement('button');b.className='cat'+(category===c.id?' active':'');b.textContent=c.name;
-  b.onclick=()=>{category=c.id;drawCategories();drawProducts()};$('categories').append(b);
+  const b=document.createElement('button');
+  b.type='button';
+  b.className='cat'+(category===c.id?' active':'');
+  b.textContent=c.name;
+  b.onclick=()=>{category=c.id;drawCategories();drawProducts()};
+  root.appendChild(b);
  });
 }
 function drawProducts(){
