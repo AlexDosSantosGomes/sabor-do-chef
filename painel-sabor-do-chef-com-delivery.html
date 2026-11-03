@@ -451,6 +451,7 @@ let products = [];
 let categories = [];
 let currentUser = null;
 let deliveryHistoryOrders = [];
+let deliveryOrdersCache = new Map();
 
 function showMessage(id, message, type = '') {
   const el = $(id);
@@ -1036,6 +1037,8 @@ async function loadDeliveryOrders() {
     return;
   }
 
+  deliveryOrdersCache = new Map((data || []).map(order => [order.id, order]));
+
   if (!data || data.length === 0) {
     list.textContent = 'Ainda não há pedidos de delivery.';
     return;
@@ -1070,6 +1073,7 @@ async function loadDeliveryOrders() {
     const phone = String(order.customer_phone || '').replace(/\D/g, '');
     const whatsappPhone = phone ? (phone.startsWith('55') ? phone : '55' + phone) : '';
     const isAccepted = ['APROVADO', 'ENVIADO_IMPRESSAO', 'IMPRESSO', 'FALHA_IMPRESSAO'].includes(order.status);
+    const canPrint = ['APROVADO', 'ENVIADO_IMPRESSAO', 'IMPRESSO', 'FALHA_IMPRESSAO', 'ENTREGUE'].includes(order.status);
     const orderStatusText = order.status === 'CANCELADO' ? 'PEDIDO CANCELADO' : order.status === 'ENTREGUE' ? 'PEDIDO ENTREGUE' : isAccepted ? 'PEDIDO ACEITO' : 'PEDIDO RECEBIDO — AGUARDANDO CONFIRMAÇÃO';
     const productSubtotal = (order.order_items || []).reduce((sum, item) => sum + (Number(item.unit_price_cents) * Number(item.quantity)), 0);
     const separator = '━━━━━━━━━━━━━━━━━━━━';
@@ -1145,6 +1149,7 @@ async function loadDeliveryOrders() {
           <button class="danger" type="button" data-order-reject="${order.id}">Cancelar pedido</button>
         ` : ''}
         ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">Marcar como entregue</button>` : ''}
+        ${canPrint ? `<button class="secondary" type="button" data-order-print="${order.id}">Imprimir 2 notas</button>` : ''}
         ${whatsappUrl ? `<a class="secondary" style="display:inline-block;text-decoration:none;text-align:center" href="${escapeHTML(whatsappUrl)}" target="_blank" rel="noopener noreferrer">Enviar WhatsApp</a>` : '<span class="small">Telefone inválido para WhatsApp</span>'}
       </div>`;
 
@@ -1196,7 +1201,72 @@ async function loadDeliveryOrders() {
     : '<p class="muted">Nenhum pedido encontrado com esses filtros.</p>';
 }
 
+function printDeliveryTickets(order) {
+  const items = order.order_items || [];
+  const date = new Date(order.created_at).toLocaleString('pt-BR');
+  const paymentNames = { CASH: 'Dinheiro na entrega', PIX: 'Pix na entrega', CARD: 'Cartão na entrega' };
+  const tendered = order.needs_change ? Number(order.change_for_cents) : null;
+  const changeDue = order.needs_change ? tendered - Number(order.total_cents) : null;
+
+  const kitchenItems = items.map(item => {
+    const quantity = Math.max(1, Number(item.quantity) || 1);
+    const accompanimentLines = [];
+    for (let unit = 0; unit < quantity; unit++) {
+      const selected = (item.order_item_accompaniments || [])
+        .filter(option => Number(option.unit_index) === unit)
+        .map(option => option.accompaniment_name);
+      if (selected.length) accompanimentLines.push('<div class="detail">Unidade ' + (unit + 1) + ': ' + selected.map(escapeHTML).join(', ') + '</div>');
+    }
+    return '<div class="item"><strong>' + quantity + 'x ' + escapeHTML(item.product_name_snapshot) + '</strong>' +
+      (item.notes ? '<div class="detail">Obs.: ' + escapeHTML(item.notes) + '</div>' : '') +
+      accompanimentLines.join('') + '</div>';
+  }).join('');
+
+  const courierItems = items.map(item => '<div class="item"><strong>' +
+    Math.max(1, Number(item.quantity) || 1) + 'x ' + escapeHTML(item.product_name_snapshot) +
+    '</strong></div>').join('');
+
+  const kitchen = '<section class="ticket"><h1>SABOR DO CHEF</h1><h2>VIA DA COZINHA</h2>' +
+    '<div class="order-number">PEDIDO #' + escapeHTML(order.order_number) + '</div>' +
+    '<div class="muted">' + escapeHTML(date) + '</div><hr>' +
+    '<h3>ITENS DO PEDIDO</h3>' + (kitchenItems || '<p>Itens não informados</p>') +
+    (order.customer_notes ? '<hr><h3>OBSERVAÇÃO DO CLIENTE</h3><p>' + escapeHTML(order.customer_notes) + '</p>' : '') +
+    '<hr><div class="footer">Conferir pedido antes de liberar</div></section>';
+
+  const courier = '<section class="ticket"><h1>SABOR DO CHEF</h1><h2>VIA DO MOTOBOY</h2>' +
+    '<div class="order-number">PEDIDO #' + escapeHTML(order.order_number) + '</div>' +
+    '<div class="muted">' + escapeHTML(date) + '</div><hr>' +
+    '<h3>CLIENTE</h3><p class="customer">' + escapeHTML(order.customer_name || 'Não informado') + '</p>' +
+    '<p><strong>Telefone:</strong><br>' + escapeHTML(order.customer_phone || 'Não informado') + '</p>' +
+    '<p><strong>Endereço:</strong><br>' + escapeHTML(order.delivery_address || 'Não informado') + '</p><hr>' +
+    '<h3>ITENS</h3>' + (courierItems || '<p>Itens não informados</p>') + '<hr>' +
+    '<h3>PAGAMENTO</h3><p>' + escapeHTML(paymentNames[order.payment_method] || order.payment_method || 'Não informado') + '</p>' +
+    (order.needs_change ? '<p><strong>Cliente paga com:</strong> ' + money(tendered) + '<br><strong>TROCO A DEVOLVER:</strong> ' + money(changeDue) + '</p>' : '') +
+    '<hr><div class="total">TOTAL: ' + money(order.total_cents) + '</div><p class="muted">Entrega grátis</p>' +
+    '<div class="footer">Conferir pagamento e endereço antes de sair</div></section>';
+
+  const printWindow = window.open('', '_blank', 'width=420,height=720');
+  if (!printWindow) {
+    alert('O navegador bloqueou a janela de impressão. Permita pop-ups para este site e tente novamente.');
+    return;
+  }
+  const documentHtml = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notas do pedido #' + escapeHTML(order.order_number) + '</title>' +
+    '<style>@page{size:80mm auto;margin:3mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;width:74mm;margin:0 auto;font-size:12px;line-height:1.35}.ticket{padding:2mm 0 4mm;break-after:page;page-break-after:always}.ticket:last-child{break-after:auto;page-break-after:auto}h1{text-align:center;font-size:17px;margin:0 0 3px}h2{text-align:center;font-size:15px;margin:2px 0 8px}h3{font-size:12px;margin:8px 0 5px}.order-number{text-align:center;font-size:18px;font-weight:bold;margin:6px 0}.muted{color:#444;font-size:10px;text-align:center}.item{padding:5px 0;border-bottom:1px dashed #aaa}.detail{font-size:11px;margin:3px 0 0 8px}p{margin:5px 0;overflow-wrap:anywhere}.customer{font-size:15px;font-weight:bold}hr{border:0;border-top:1px dashed #555;margin:8px 0}.total{font-size:18px;font-weight:bold;text-align:center;margin:8px 0}.footer{text-align:center;font-size:10px;font-weight:bold;margin-top:10px}@media screen{body{padding:12px}.ticket{margin-bottom:18px;border-bottom:2px dashed #777}}@media print{body{width:auto}.ticket{margin:0}}</style></head><body>' + kitchen + courier + '</body></html>';
+  printWindow.document.open();
+  printWindow.document.write(documentHtml);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
 const handleOrderAction = async (event) => {
+  const printButton = event.target.closest('[data-order-print]');
+  if (printButton) {
+    const order = deliveryOrdersCache.get(printButton.dataset.orderPrint);
+    if (!order) { alert('Não foi possível localizar os dados deste pedido. Atualize a lista e tente novamente.'); return; }
+    printDeliveryTickets(order);
+    return;
+  }
   const acceptButton = event.target.closest('[data-order-accept]');
   const rejectButton = event.target.closest('[data-order-reject]');
   const deliverButton = event.target.closest('[data-order-deliver]');
