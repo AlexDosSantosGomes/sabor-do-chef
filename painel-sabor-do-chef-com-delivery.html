@@ -380,6 +380,16 @@ button:active{transform:translateY(1px)}
   </section>
 
   <section class="panel" data-admin-section="orders">
+    <div id="storeControlCard" style="margin-bottom:20px;padding:18px;border:1px solid #e7e9ee;border-radius:15px;background:#fff">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <h2 style="margin:0 0 5px">Funcionamento da loja</h2>
+          <div id="storeStatusText" class="muted">Consultando situação da loja...</div>
+        </div>
+        <button id="storeToggleBtn" class="danger" type="button" disabled>Carregando...</button>
+      </div>
+      <div id="storeControlMessage" class="message" aria-live="polite"></div>
+    </div>
     <div class="toolbar" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
       <h2 style="margin:0">Pedidos de delivery</h2>
       <button class="secondary" id="refreshOrdersBtn" type="button">Atualizar pedidos</button>
@@ -459,6 +469,41 @@ function showMessage(id, message, type = '') {
   el.className = 'message ' + type;
 }
 
+let storeIsOpen = true;
+async function loadStoreStatus() {
+  const { data, error } = await supabase.from('store_settings')
+    .select('is_open').eq('id', true).maybeSingle();
+  if (error) throw error;
+  storeIsOpen = data?.is_open !== false;
+  $('storeStatusText').textContent = storeIsOpen
+    ? 'A loja está aberta e pode receber novos pedidos.'
+    : 'A loja está fechada. O cardápio continua visível, mas novos pedidos estão bloqueados.';
+  $('storeToggleBtn').textContent = storeIsOpen ? 'Fechar loja' : 'Abrir loja';
+  $('storeToggleBtn').className = storeIsOpen ? 'danger' : 'primary';
+  $('storeToggleBtn').disabled = false;
+}
+$('storeToggleBtn').addEventListener('click', async () => {
+  const nextState = !storeIsOpen;
+  const action = nextState ? 'abrir' : 'fechar';
+  if (!confirm('Confirma que deseja ' + action + ' a loja?')) return;
+  const button = $('storeToggleBtn');
+  button.disabled = true;
+  showMessage('storeControlMessage', 'Atualizando funcionamento da loja...');
+  try {
+    const { error } = await supabase.from('store_settings')
+      .update({ is_open: nextState, updated_at: new Date().toISOString() })
+      .eq('id', true);
+    if (error) throw error;
+    await loadStoreStatus();
+    showMessage('storeControlMessage', nextState
+      ? 'Loja aberta! Novos pedidos estão liberados.'
+      : 'Loja fechada! Novos pedidos foram bloqueados.', 'success');
+  } catch (error) {
+    button.disabled = false;
+    showMessage('storeControlMessage', 'Não foi possível alterar: ' + (error.message || error), 'error');
+  }
+});
+
 function money(cents) {
   return (Number(cents) / 100).toLocaleString('pt-BR', {
     style: 'currency',
@@ -509,6 +554,7 @@ async function startApp(user) {
     currentUser = user;
     await checkAdmin(user);
     showApp();
+    await loadStoreStatus();
     await loadCategories();
     await loadProducts();
     await loadAccompaniments();
