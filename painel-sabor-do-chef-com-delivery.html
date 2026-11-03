@@ -369,7 +369,15 @@ button:active{transform:translateY(1px)}
     <h3 style="margin-top:22px">Outros pedidos em andamento</h3>
     <div id="deliveryOrderList" class="order-list"></div>
     <h3 style="margin-top:24px">Histórico de pedidos</h3>
-    <p class="muted">Pedidos entregues e cancelados permanecem salvos aqui.</p>
+    <p class="muted">Pesquise pedidos anteriores por número ou cliente e filtre pela situação.</p>
+    <div class="toolbar" style="flex-wrap:wrap">
+      <input id="historySearch" type="search" placeholder="Buscar por nº do pedido ou cliente..." aria-label="Buscar no histórico">
+      <select id="historyStatus" aria-label="Filtrar situação do histórico" style="max-width:190px">
+        <option value="TODOS">Todos os pedidos</option>
+        <option value="ENTREGUE">Entregues</option>
+        <option value="CANCELADO">Cancelados</option>
+      </select>
+    </div>
     <div id="deliveryOrderHistory" class="order-list">Carregando histórico...</div>
   </section>
 
@@ -390,6 +398,7 @@ const $ = (id) => document.getElementById(id);
 let products = [];
 let categories = [];
 let currentUser = null;
+let deliveryHistoryOrders = [];
 
 function showMessage(id, message, type = '') {
   const el = $(id);
@@ -968,7 +977,7 @@ async function loadDeliveryOrders() {
     .select('id, order_number, status, customer_name, customer_phone, delivery_address, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes, order_item_accompaniments(accompaniment_name, unit_index))')
     .eq('order_type', 'DELIVERY')
     .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(100);
 
   if (error) {
     list.textContent = 'Não foi possível carregar os pedidos: ' + error.message;
@@ -1113,7 +1122,18 @@ async function loadDeliveryOrders() {
   $('deliveryOrderPending').innerHTML = pendingOrders.length ? pendingOrders.map(renderOrder).join('') : '<p class="muted">Nenhum pedido aguardando aprovação.</p>';
   $('deliveryOrderAccepted').innerHTML = acceptedOrders.length ? acceptedOrders.map(renderOrder).join('') : '<p class="muted">Nenhum pedido aceito no momento.</p>';
   $('deliveryOrderList').innerHTML = otherActiveOrders.length ? otherActiveOrders.map(renderOrder).join('') : '<p class="muted">Nenhum outro pedido em andamento.</p>';
-  $('deliveryOrderHistory').innerHTML = historyOrders.length ? historyOrders.map(renderOrder).join('') : '<p class="muted">Ainda não há pedidos no histórico.</p>';
+  const historySearch = $('historySearch').value.trim().toLocaleLowerCase('pt-BR');
+  const historyStatus = $('historyStatus').value;
+  const filteredHistory = historyOrders.filter(order => {
+    const matchesSearch = !historySearch ||
+      String(order.order_number || '').toLocaleLowerCase('pt-BR').includes(historySearch) ||
+      String(order.customer_name || '').toLocaleLowerCase('pt-BR').includes(historySearch);
+    const matchesStatus = historyStatus === 'TODOS' || order.status === historyStatus;
+    return matchesSearch && matchesStatus;
+  });
+  $('deliveryOrderHistory').innerHTML = filteredHistory.length
+    ? filteredHistory.map(renderOrder).join('')
+    : '<p class="muted">Nenhum pedido encontrado com esses filtros.</p>';
 }
 
 const handleOrderAction = async (event) => {
@@ -1188,6 +1208,8 @@ const handleOrderAction = async (event) => {
   $(id).addEventListener('click', handleOrderAction);
 });
 
+$('historySearch').addEventListener('input', loadDeliveryOrders);
+$('historyStatus').addEventListener('change', loadDeliveryOrders);
 $('refreshOrdersBtn').addEventListener('click', loadDeliveryOrders);
 
 
