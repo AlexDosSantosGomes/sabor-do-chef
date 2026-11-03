@@ -1280,7 +1280,9 @@ function setAdminSection(section) {
 
 $('adminNavigation').addEventListener('click', event => {
   const button = event.target.closest('[data-admin-tab]');
-  if (button) setAdminSection(button.dataset.adminTab);
+  if (!button) return;
+  setAdminSection(button.dataset.adminTab);
+  if (button.dataset.adminTab === 'finance') loadFinancialReport();
 });
 
 function localDateKey(date) {
