@@ -168,19 +168,12 @@ function drawProducts(){
  const root=$('products');root.innerHTML='';
  let list=products.filter(p=>category==='all'||p.category_id===category);
  if(category==='all'){
-  const order={quentinha:0,porcao:1,sobremesa:2,bebida:3};
-  const key=name=>{
-   const n=String(name||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();
-   if(n==='quentinha'||n==='quentinhas')return 'quentinha';
-   if(n==='porcao'||n==='porcoes')return 'porcao';
-   if(n==='sobremesa'||n==='sobremesas')return 'sobremesa';
-   if(n==='bebida'||n==='bebidas')return 'bebida';
-   return n;
-  };
+  const categoryRank=new Map(categories.map((c,index)=>[c.id,index]));
   list.sort((a,b)=>{
-   const ca=categories.find(c=>c.id===a.category_id);
-   const cb=categories.find(c=>c.id===b.category_id);
-   return (order[key(ca?.name)]??999)-(order[key(cb?.name)]??999);
+   const rankA=categoryRank.get(a.category_id)??999;
+   const rankB=categoryRank.get(b.category_id)??999;
+   if(rankA!==rankB)return rankA-rankB;
+   return String(a.name||'').localeCompare(String(b.name||''),'pt-BR');
   });
  }
  if(!list.length){root.innerHTML='<div class="loading">Nenhum produto disponível nesta categoria.</div>';return}
