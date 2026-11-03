@@ -361,18 +361,6 @@ button:active{transform:translateY(1px)}
     <div id="deliveryOrderHistory" class="order-list">Carregando histórico...</div>
   </section>
 
-  <section class="panel">
-    <h2>Cadastrar categoria</h2>
-    <form id="categoryForm">
-      <label for="categoryName">Nome da categoria</label>
-      <input id="categoryName" required maxlength="80"
-        placeholder="Ex.: Hambúrgueres">
-      <button class="primary" type="submit" style="margin-top:12px">
-        Adicionar categoria
-      </button>
-      <div id="categoryMessage" class="message"></div>
-    </form>
-  </section>
 
 </main>
 
@@ -499,10 +487,11 @@ async function loadCategories() {
 
   categories = data || [];
 
+  const allowedCategories = new Set(['quentinha', 'porções', 'sobremesas', 'bebidas']);
   $('category').innerHTML =
     '<option value="">Selecione uma categoria</option>' +
     categories
-      .filter(item => item.active)
+      .filter(item => item.active && allowedCategories.has(item.name.trim().toLocaleLowerCase('pt-BR')))
       .map(item =>
         `<option value="${item.id}">${escapeHTML(item.name)}</option>`
       ).join('');
@@ -1173,32 +1162,6 @@ $('deliveryOrderList').addEventListener('click', async (event) => {
 
 $('refreshOrdersBtn').addEventListener('click', loadDeliveryOrders);
 
-$('categoryForm').addEventListener('submit', async (event) => {
-  event.preventDefault();
-
-  const name = $('categoryName').value.trim();
-  if (!name) return;
-
-  const { error } = await supabase
-    .from('categories')
-    .insert({
-      name,
-      active: true,
-      sort_order: categories.length + 1
-    });
-
-  if (error) {
-    showMessage('categoryMessage',
-      'Erro ao cadastrar categoria: ' + error.message, 'error');
-    return;
-  }
-
-  $('categoryName').value = '';
-  showMessage('categoryMessage',
-    'Categoria cadastrada!', 'success');
-
-  await loadCategories();
-});
 
 async function restoreSession() {
   const { data, error } = await supabase.auth.getSession();
