@@ -168,6 +168,13 @@ button {
 .order-items { margin:10px 0; padding-left:20px; line-height:1.6; }
 .order-total { font-weight:bold; font-size:17px; margin-top:8px; }
 .order-status { display:inline-block; padding:4px 8px; border-radius:20px; background:#fff2d8; color:#805500; font-size:12px; font-weight:bold; }
+.order-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0 22px}
+.order-summary-card{background:#f7f7f9;border:1px solid var(--border);border-radius:12px;padding:13px}
+.order-summary-card strong{display:block;font-size:23px;line-height:1.2;color:var(--text)}
+.order-summary-card span{font-size:12px;color:var(--muted);font-weight:700}
+.order-card.new-order{border:2px solid #d99a25;border-left:6px solid #d99a25;background:#fffaf0;box-shadow:0 5px 18px #d99a251c}
+.new-order-label{display:inline-block;margin-top:7px;padding:4px 8px;border-radius:20px;background:#fff0c9;color:#805500;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+@media(max-width:520px){.order-summary{grid-template-columns:1fr 1fr}.order-summary-card:last-child{grid-column:1/-1}}
 
 @media(max-width:650px) {
   main { margin: 15px auto; }
@@ -353,9 +360,14 @@ button:active{transform:translateY(1px)}
       <h2 style="margin:0">Pedidos de delivery</h2>
       <button class="secondary" id="refreshOrdersBtn" type="button">Atualizar pedidos</button>
     </div>
-    <p class="muted">Os pedidos feitos pelo cardápio público aparecerão aqui.</p>
-    <h3>Pedidos em andamento</h3>
-    <div id="deliveryOrderList" class="order-list">Carregando pedidos...</div>
+    <p class="muted">Pedidos novos ficam destacados. A lista é organizada por situação.</p>
+    <div id="deliveryOrderSummary" class="order-summary"></div>
+    <h3>Novos pedidos · aguardando aprovação</h3>
+    <div id="deliveryOrderPending" class="order-list">Carregando pedidos...</div>
+    <h3 style="margin-top:22px">Pedidos aceitos</h3>
+    <div id="deliveryOrderAccepted" class="order-list"></div>
+    <h3 style="margin-top:22px">Outros pedidos em andamento</h3>
+    <div id="deliveryOrderList" class="order-list"></div>
     <h3 style="margin-top:24px">Histórico de pedidos</h3>
     <p class="muted">Pedidos entregues e cancelados permanecem salvos aqui.</p>
     <div id="deliveryOrderHistory" class="order-list">Carregando histórico...</div>
@@ -1068,12 +1080,14 @@ async function loadDeliveryOrders() {
         ${whatsappUrl ? `<a class="secondary" style="display:inline-block;text-decoration:none;text-align:center" href="${escapeHTML(whatsappUrl)}" target="_blank" rel="noopener noreferrer">Enviar WhatsApp</a>` : '<span class="small">Telefone inválido para WhatsApp</span>'}
       </div>`;
 
+    const isNewOrder = isPending;
     return `
-      <article class="order-card">
+      <article class="order-card ${isNewOrder ? 'new-order' : ''}">
         <div class="order-head">
           <strong>Pedido #${escapeHTML(order.order_number)}</strong>
           <span class="order-status">${escapeHTML(statusNames[order.status] || order.status)}</span>
         </div>
+        ${isNewOrder ? '<div class="new-order-label">Novo pedido · precisa de aprovação</div>' : ''}
         <div class="order-meta">${date}</div>
         <div><strong>Cliente:</strong> ${escapeHTML(order.customer_name)}</div>
         <div><strong>Telefone:</strong> ${escapeHTML(order.customer_phone)}</div>
@@ -1086,9 +1100,19 @@ async function loadDeliveryOrders() {
         ${actions}
       </article>`;
   };
-  const activeOrders = data.filter(order => !['ENTREGUE', 'CANCELADO'].includes(order.status));
+  const pendingOrders = data.filter(order => ['RECEBIDO', 'AGUARDANDO_APROVACAO'].includes(order.status));
+  const acceptedOrders = data.filter(order => ['APROVADO', 'ENVIADO_IMPRESSAO', 'IMPRESSO', 'FALHA_IMPRESSAO'].includes(order.status));
   const historyOrders = data.filter(order => ['ENTREGUE', 'CANCELADO'].includes(order.status));
-  $('deliveryOrderList').innerHTML = activeOrders.length ? activeOrders.map(renderOrder).join('') : '<p class="muted">Nenhum pedido em andamento.</p>';
+  const knownOrders = new Set([...pendingOrders, ...acceptedOrders, ...historyOrders].map(order => order.id));
+  const otherActiveOrders = data.filter(order => !knownOrders.has(order.id));
+
+  $('deliveryOrderSummary').innerHTML = `
+    <div class="order-summary-card"><strong>${pendingOrders.length}</strong><span>Novos pedidos</span></div>
+    <div class="order-summary-card"><strong>${acceptedOrders.length}</strong><span>Pedidos aceitos</span></div>
+    <div class="order-summary-card"><strong>${historyOrders.length}</strong><span>No histórico</span></div>`;
+  $('deliveryOrderPending').innerHTML = pendingOrders.length ? pendingOrders.map(renderOrder).join('') : '<p class="muted">Nenhum pedido aguardando aprovação.</p>';
+  $('deliveryOrderAccepted').innerHTML = acceptedOrders.length ? acceptedOrders.map(renderOrder).join('') : '<p class="muted">Nenhum pedido aceito no momento.</p>';
+  $('deliveryOrderList').innerHTML = otherActiveOrders.length ? otherActiveOrders.map(renderOrder).join('') : '<p class="muted">Nenhum outro pedido em andamento.</p>';
   $('deliveryOrderHistory').innerHTML = historyOrders.length ? historyOrders.map(renderOrder).join('') : '<p class="muted">Ainda não há pedidos no histórico.</p>';
 }
 
