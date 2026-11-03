@@ -1116,7 +1116,7 @@ async function loadDeliveryOrders() {
   $('deliveryOrderHistory').innerHTML = historyOrders.length ? historyOrders.map(renderOrder).join('') : '<p class="muted">Ainda não há pedidos no histórico.</p>';
 }
 
-$('deliveryOrderList').addEventListener('click', async (event) => {
+const handleOrderAction = async (event) => {
   const acceptButton = event.target.closest('[data-order-accept]');
   const rejectButton = event.target.closest('[data-order-reject]');
   const deliverButton = event.target.closest('[data-order-deliver]');
@@ -1182,6 +1182,10 @@ $('deliveryOrderList').addEventListener('click', async (event) => {
   try{const {error:notifyError}=await supabase.functions.invoke('notify-order-status',{body:{order_id:orderId,status:newStatus}});if(notifyError)console.warn('Aviso push não enviado:',notifyError.message);}catch(e){console.warn('Aviso push não enviado:',e);}
   alert(acceptButton ? 'Pedido aceito com sucesso!' : 'Pedido recusado e motivo registrado.');
   await loadDeliveryOrders();
+};
+
+['deliveryOrderPending', 'deliveryOrderAccepted', 'deliveryOrderList'].forEach(id => {
+  $(id).addEventListener('click', handleOrderAction);
 });
 
 $('refreshOrdersBtn').addEventListener('click', loadDeliveryOrders);
