@@ -334,7 +334,7 @@ button:active{transform:translateY(1px)}
 
   <section class="panel">
     <h2>Acompanhamentos dos pratos</h2>
-    <p class="muted">Cadastre até 2 opções ativas para cada prato. O cliente poderá escolher no cardápio.</p>
+    <p class="muted">Cadastre os acompanhamentos de cada prato. Ao desativar uma opção, ela ficará indisponível em todos os pratos que tenham o mesmo acompanhamento. Você poderá ativá-la novamente quando quiser.</p>
     <label for="accompProduct">Prato</label>
     <select id="accompProduct"><option value="">Selecione um prato</option></select>
     <form id="accompForm">
@@ -868,12 +868,33 @@ $('accompList').addEventListener('click', async (event) => {
   if (!button) return;
   const id = button.dataset.accompToggle;
   const currentlyActive = button.dataset.active === 'true';
+  button.disabled = true;
+
+  // Busca o nome da opção e altera todas as ocorrências desse acompanhamento,
+  // independentemente do prato ao qual cada registro está vinculado.
+  const { data: item, error: readError } = await supabase
+    .from('product_accompaniments')
+    .select('name')
+    .eq('id', id)
+    .single();
+  if (readError || !item) {
+    button.disabled = false;
+    showMessage('accompMessage', 'Erro ao localizar acompanhamento: ' + (readError?.message || 'registro não encontrado.'), 'error');
+    return;
+  }
+
   const { error } = await supabase.from('product_accompaniments')
-    .update({ active: !currentlyActive }).eq('id', id);
+    .update({ active: !currentlyActive })
+    .ilike('name', item.name);
   if (error) {
+    button.disabled = false;
     showMessage('accompMessage', 'Erro ao atualizar: ' + error.message, 'error');
     return;
   }
+
+  showMessage('accompMessage',
+    (currentlyActive ? 'Acompanhamento desativado' : 'Acompanhamento ativado') +
+    ' em todos os pratos que usam essa opção.', 'success');
   await renderAccompaniments();
 });
 
