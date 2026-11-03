@@ -111,7 +111,7 @@ body.success-screen #success-screen{display:block}
 <label for="address">Endereço completo</label><textarea id="address" maxlength="300" required autocomplete="street-address" placeholder="Rua, número, complemento, bairro e referência"></textarea>
 <label for="customer-notes">Observações do pedido (opcional)</label><textarea id="customer-notes" maxlength="300" rows="3" placeholder="Ex.: Não colocar cebola, enviar talheres..."></textarea><div class="small">Se tiver algum pedido especial, escreva aqui. (Até 300 caracteres)</div>
 <label for="payment">Forma de pagamento</label><select id="payment"><option value="CASH">Dinheiro</option><option value="PIX">Pix na entrega</option><option value="CARD">Cartão na entrega</option></select>
-<div id="change-area"><label class="check"><input type="checkbox" id="needs-change"> Precisa de troco?</label><div id="change-value" class="hidden"><label for="change-for">Troco para quanto? (R$)</label><input id="change-for" inputmode="decimal" placeholder="Ex.: 50,00"></div></div>
+<div id="change-area"><label class="check"><input type="checkbox" id="needs-change"> Precisa de troco?</label><div id="change-value" class="hidden"><label for="change-for">Vai pagar com quanto? (R$)</label><input id="change-for" inputmode="decimal" placeholder="Ex.: 50,00"><div id="change-preview" class="small" aria-live="polite" style="margin-top:7px;font-weight:700"></div></div></div>
 <button class="btn submit" id="submit" type="submit">Confirmar pedido</button><div class="small">O pagamento será feito ao receber o pedido. Não há cobrança pelo site.</div><div id="message" class="message" role="status" aria-live="polite"></div>
 </form></aside></div></main>
 <section id="success-screen" aria-live="polite">
@@ -247,10 +247,12 @@ function drawCart(){
   const plus=document.createElement('button');plus.textContent='+';plus.setAttribute('aria-label','Adicionar outro prato');plus.onclick=()=>qty(product.id,1);
   controls.append(minus,num,plus);row.append(info,controls);root.append(row);
  });
- $('count').textContent=count;$('subtotal').textContent=money(total);$('total').textContent=money(total);$('mobile-total').textContent=money(total);
+ $('count').textContent=count;$('subtotal').textContent=money(total);$('total').textContent=money(total);$('mobile-total').textContent=money(total);updateChangePreview(total);
 }
-$('payment').onchange=()=>{const cash=$('payment').value==='CASH';$('change-area').classList.toggle('hidden',!cash);if(!cash){$('needs-change').checked=false;$('change-value').classList.add('hidden');$('change-for').value=''}};
-$('needs-change').onchange=()=>$('change-value').classList.toggle('hidden',!$('needs-change').checked);
+function updateChangePreview(totalOverride){const preview=$('change-preview');if(!preview)return;const total=Number.isInteger(totalOverride)?totalOverride:[...cart.values()].reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0);const tendered=cents($('change-for').value);if(!$('needs-change').checked||$('payment').value!=='CASH'){preview.textContent='';return}if(!tendered){preview.textContent='Informe quanto vai entregar em dinheiro.';preview.style.color='#737985';return}if(tendered<=total){preview.textContent='O valor precisa ser maior que o total do pedido ('+money(total)+').';preview.style.color='#b5121b';return}preview.textContent='Troco a devolver: '+money(tendered-total);preview.style.color='#16803c'}
+$('payment').onchange=()=>{const cash=$('payment').value==='CASH';$('change-area').classList.toggle('hidden',!cash);if(!cash){$('needs-change').checked=false;$('change-value').classList.add('hidden');$('change-for').value=''}updateChangePreview()};
+$('needs-change').onchange=()=>{$('change-value').classList.toggle('hidden',!$('needs-change').checked);updateChangePreview()};
+$('change-for').addEventListener('input',()=>updateChangePreview());
 function openOrderScreen(){document.body.classList.add('order-screen');window.scrollTo({top:0,behavior:'smooth'})}
 function closeOrderScreen(){document.body.classList.remove('order-screen');window.scrollTo({top:0,behavior:'smooth'})}
 function closeSuccessScreen(){document.body.classList.remove('success-screen');window.scrollTo({top:0,behavior:'smooth'})}
@@ -263,6 +265,8 @@ $('checkout').onsubmit=async e=>{
  if(!cart.size){message('Adicione produtos ao carrinho.');return}
  const payment=$('payment').value,needs=payment==='CASH'&&$('needs-change').checked,change=needs?cents($('change-for').value):null;
  if(needs&&!change){message('Informe um valor válido para o troco.');return}
+ const orderTotal=[...cart.values()].reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0);
+ if(needs&&change<=orderTotal){message('O valor informado para troco precisa ser maior que o total do pedido ('+money(orderTotal)+').');return}
  const payload={
   push_subscription:pushSubscription?pushSubscription.toJSON():null,
   customer_name:$('customer-name').value.trim(),customer_phone:$('customer-phone').value.trim(),
@@ -279,7 +283,7 @@ $('checkout').onsubmit=async e=>{
   $('success-customer').textContent=payload.customer_name;
   $('success-total').textContent=money(data.total_cents);
   $('success-payment').textContent=paymentLabels[payment]||'Pagamento na entrega';
-  cart.clear();drawCart();$('checkout').reset();$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');
+  cart.clear();drawCart();$('checkout').reset();$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);
   document.body.classList.remove('order-screen');
   document.body.classList.add('success-screen');
   window.scrollTo({top:0,behavior:'smooth'});
