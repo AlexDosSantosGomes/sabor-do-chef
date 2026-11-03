@@ -881,7 +881,7 @@ $('accompForm').addEventListener('submit', async (event) => {
 
   const { data: existing, error: readError } = await supabase
     .from('product_accompaniments')
-    .select('product_id, name, sort_order')
+    .select('id, product_id, name, sort_order')
     .in('product_id', quentinhaProducts.map(product => product.id));
   if (readError) {
     showMessage('accompMessage', 'Erro ao verificar opções: ' + readError.message, 'error');
@@ -908,6 +908,17 @@ $('accompForm').addEventListener('submit', async (event) => {
         sort_order: Math.max(0, ...productRows.map(item => Number(item.sort_order) || 0)) + 1
       };
     });
+
+  if (matching.length) {
+    const { error: activateError } = await supabase
+      .from('product_accompaniments')
+      .update({ active: true })
+      .in('id', matching.map(item => item.id));
+    if (activateError) {
+      showMessage('accompMessage', 'Erro ao ativar opções existentes: ' + activateError.message, 'error');
+      return;
+    }
+  }
 
   const { error } = await supabase.from('product_accompaniments').insert(rows);
   if (error) {
