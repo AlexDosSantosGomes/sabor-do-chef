@@ -74,7 +74,10 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:#bd222b;box-sh
 @media(max-width:390px){.products{grid-template-columns:1fr}.photo,.placeholder{height:185px}}
 
 /* Navegação entre cardápio e revisão do pedido */
+/* O painel do pedido fica oculto no cardápio e só aparece na tela de revisão. */
+.layout>.cart{display:none}
 body.order-screen main>h2,body.order-screen #categories,body.order-screen .layout>section{display:none}
+body.order-screen .layout>.cart{display:block}
 body.order-screen .layout{display:block;max-width:720px;margin:0 auto}
 body.order-screen .cart{position:static;width:100%;margin:0 auto}
 body.order-screen .mobile{display:none}
