@@ -280,7 +280,32 @@ button:active{transform:translateY(1px)}
     <button type="button" data-admin-tab="products" aria-selected="false">Produtos</button>
     <button type="button" data-admin-tab="accompaniments" aria-selected="false">Acompanhamentos</button>
     <button type="button" data-admin-tab="finance" aria-selected="false">Financeiro</button>
+    <button type="button" data-admin-tab="printer" aria-selected="false">Central de impressão</button>
   </nav>
+
+  <section class="panel admin-section-hidden" data-admin-section="printer">
+    <h2>Central de impressão</h2>
+    <p class="muted">Conecte o Android que ficará responsável por receber e imprimir automaticamente os pedidos aprovados.</p>
+    <div style="padding:16px;border:1px solid #e9eaf0;border-radius:14px;background:#fff">
+      <label for="printerDeviceName">Nome do aparelho</label>
+      <input id="printerDeviceName" maxlength="80" value="Central Android" placeholder="Ex.: Android do balcão">
+      <button class="primary" id="generatePrinterCodeBtn" type="button" style="margin-top:14px">Gerar código de conexão</button>
+      <div id="printerPairMessage" class="message" aria-live="polite"></div>
+      <div id="printerCodeWrap" class="hidden" style="margin-top:12px;padding:14px;border-radius:12px;background:#fff8e8;border:1px solid #f0d99b">
+        <strong>Copie este código e cole no aplicativo Android:</strong>
+        <input id="printerConnectionCode" readonly style="margin-top:8px;font-family:monospace;font-size:13px">
+        <button class="secondary" id="copyPrinterCodeBtn" type="button" style="margin-top:8px">Copiar código</button>
+        <p class="muted" style="margin-bottom:0">O código é exibido somente agora. Guarde-o até salvar a conexão no Android.</p>
+      </div>
+    </div>
+    <div style="margin-top:18px;padding:16px;border:1px solid #e9eaf0;border-radius:14px;background:#fff">
+      <div class="toolbar" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
+        <h3 style="margin:0">Aparelhos vinculados</h3>
+        <button class="secondary" id="refreshPrinterDevicesBtn" type="button">Atualizar status</button>
+      </div>
+      <div id="printerDevicesList" class="product-list" style="margin-top:12px">Consulte os aparelhos vinculados.</div>
+    </div>
+  </section>
 
   <section class="panel" data-admin-section="products">
     <h2 id="formTitle">Cadastrar produto</h2>
@@ -597,8 +622,7 @@ $('logoutBtn').addEventListener('click', async () => {
 });
 
 async function loadCategories() {
-  const { data, error } = await supabase
-    .from('categories')
+  const { data, error } = await supabase    .from('categories')
     .select('id, name, active, sort_order')
     .order('sort_order')
     .order('name');
@@ -1198,7 +1222,6 @@ async function loadDeliveryOrders() {
         ${canPrint ? `<button class="primary" type="button" data-order-print-both="${order.id}">Imprimir as duas vias</button>` : ''}
         ${whatsappUrl ? `<a class="secondary" style="display:inline-block;text-decoration:none;text-align:center" href="${escapeHTML(whatsappUrl)}" target="_blank" rel="noopener noreferrer">Enviar WhatsApp</a>` : '<span class="small">Telefone inválido para WhatsApp</span>'}
       </div>`;
-
     const isNewOrder = isPending;
     return `
       <article class="order-card ${isNewOrder ? 'new-order' : ''}">
@@ -1492,7 +1515,7 @@ $('refreshOrdersBtn').addEventListener('click', loadDeliveryOrders);
 
 
 function setAdminSection(section) {
-  const validSections = ['orders', 'products', 'accompaniments', 'finance'];
+  const validSections = ['orders', 'products', 'accompaniments', 'finance', 'printer'];
   const activeSection = validSections.includes(section) ? section : 'orders';
   document.querySelectorAll('[data-admin-section]').forEach(panel => {
     const visible = panel.dataset.adminSection === activeSection;
@@ -1509,6 +1532,7 @@ $('adminNavigation').addEventListener('click', event => {
   if (!button) return;
   setAdminSection(button.dataset.adminTab);
   if (button.dataset.adminTab === 'finance') loadFinancialReport();
+  if (button.dataset.adminTab === 'printer') refreshPrinterDevices();
 });
 
 function localDateKey(date) {
@@ -1614,6 +1638,60 @@ const nowForFinance = new Date();
 $('financeMonth').value = nowForFinance.getFullYear() + '-' + String(nowForFinance.getMonth() + 1).padStart(2, '0');
 $('financeMonth').addEventListener('change', loadFinancialReport);
 $('refreshFinanceBtn').addEventListener('click', loadFinancialReport);
+
+async function printerAdminRequest(body) {
+  const { data, error } = await supabase.functions.invoke('printer-device-api', { body });
+  if (error) {
+    let detail = error.message || 'Falha ao comunicar com a central.';
+    try { const response = error.context; if (response && typeof response.clone === 'function') { const payload = await response.clone().json(); if (payload?.error) detail = payload.error; } } catch (_) {}
+    throw new Error(detail);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+async function refreshPrinterDevices() {
+  const list = $('printerDevicesList');
+  if (!list) return;
+  list.textContent = 'Consultando aparelhos vinculados...';
+  try {
+    const data = await printerAdminRequest({ action: 'admin_status' });
+    const devices = data.devices || [];
+    if (!devices.length) { list.innerHTML = '<p class="muted">Nenhum aparelho vinculado ainda.</p>'; return; }
+    list.innerHTML = devices.map(device => {
+      const seen = device.last_seen_at ? new Date(device.last_seen_at) : null;
+      const online = !!seen && (Date.now() - seen.getTime()) < 120000;
+      const status = online ? 'Central ativa' : 'Aguardando conexão';
+      const lastSeen = seen ? seen.toLocaleString('pt-BR') : 'Ainda não iniciou';
+      return '<article class="product"><div class="product-info"><strong>' + escapeHTML(device.name || 'Central Android') + '</strong><small><span class="status ' + (online ? '' : 'off') + '">' + status + '</span><br>Último contato: ' + escapeHTML(lastSeen) + '</small></div></article>';
+    }).join('');
+  } catch (error) { list.textContent = 'Não foi possível consultar os aparelhos: ' + (error.message || error); }
+}
+
+$('generatePrinterCodeBtn').addEventListener('click', async () => {
+  const button = $('generatePrinterCodeBtn');
+  const name = $('printerDeviceName').value.trim() || 'Central Android';
+  if (!confirm('Gerar um código de conexão para ' + name + '?')) return;
+  button.disabled = true;
+  $('printerCodeWrap').classList.add('hidden');
+  showMessage('printerPairMessage', 'Gerando código seguro...');
+  try {
+    const data = await printerAdminRequest({ action: 'admin_pair', name });
+    $('printerConnectionCode').value = data.device_token;
+    $('printerCodeWrap').classList.remove('hidden');
+    showMessage('printerPairMessage', 'Código gerado. Cole-o no aplicativo Android e toque em Salvar conexão.', 'success');
+    await refreshPrinterDevices();
+  } catch (error) { showMessage('printerPairMessage', 'Não foi possível gerar o código: ' + (error.message || error), 'error'); }
+  finally { button.disabled = false; }
+});
+
+$('copyPrinterCodeBtn').addEventListener('click', async () => {
+  const code = $('printerConnectionCode').value;
+  if (!code) return;
+  try { await navigator.clipboard.writeText(code); showMessage('printerPairMessage', 'Código copiado. Cole-o no aplicativo Android.', 'success'); }
+  catch (_) { $('printerConnectionCode').select(); showMessage('printerPairMessage', 'Selecione e copie o código manualmente.', ''); }
+});
+$('refreshPrinterDevicesBtn').addEventListener('click', refreshPrinterDevices);
 
 async function restoreSession() {
   const { data, error } = await supabase.auth.getSession();
