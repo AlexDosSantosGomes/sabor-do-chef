@@ -56,6 +56,17 @@ class MainActivity : AppCompatActivity() {
                 serviceStatus.text = "Serviço de impressão: parado"
             }
         }
+        val testPrint = Button(this).apply {
+            text = "Teste de impressão"
+            setOnClickListener {
+                val sample = "SABOR DO CHEF\\nTESTE DE IMPRESSAO\\n\\n".toByteArray(Charsets.UTF_8)
+                try {
+                    RawBtBridge.sendEscPos(this@MainActivity, sample)
+                } catch (_: Exception) {
+                    serviceStatus.text = "Não foi possível abrir o RawBT. Verifique se está instalado."
+                }
+            }
+        }
         val note = TextView(this).apply {
             text = "Mantenha este aparelho ligado, conectado à internet e pareado com a impressora. A conexão remota com os pedidos será ativada na próxima etapa."
             textSize = 14f
@@ -67,6 +78,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(serviceStatus)
         root.addView(start)
         root.addView(stop)
+        root.addView(testPrint)
         root.addView(note)
         setContentView(root)
     }
