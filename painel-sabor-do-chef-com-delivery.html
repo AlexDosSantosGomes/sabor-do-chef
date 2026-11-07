@@ -1195,9 +1195,7 @@ async function loadDeliveryOrders() {
           <button class="danger" type="button" data-order-reject="${order.id}">Cancelar pedido</button>
         ` : ''}
         ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">Marcar como entregue</button>` : ''}
-        ${canPrint ? `<button class="primary" type="button" data-order-print-both="${order.id}">Imprimir as duas vias</button>
-          <button class="secondary" type="button" data-order-print-kitchen="${order.id}">Imprimir via da cozinha</button>
-          <button class="secondary" type="button" data-order-print-courier="${order.id}">Imprimir via do motoboy</button>` : ''}
+        ${canPrint ? `<button class="primary" type="button" data-order-print-both="${order.id}">Imprimir as duas vias</button>` : ''}
         ${whatsappUrl ? `<a class="secondary" style="display:inline-block;text-decoration:none;text-align:center" href="${escapeHTML(whatsappUrl)}" target="_blank" rel="noopener noreferrer">Enviar WhatsApp</a>` : '<span class="small">Telefone inválido para WhatsApp</span>'}
       </div>`;
 
@@ -1406,18 +1404,14 @@ function printDeliveryTickets(order, ticketType = 'both') {
 
 const handleOrderAction = async (event) => {
   const bothPrintButton = event.target.closest('[data-order-print-both]');
-  const kitchenPrintButton = event.target.closest('[data-order-print-kitchen]');
-  const courierPrintButton = event.target.closest('[data-order-print-courier]');
-  if (bothPrintButton || kitchenPrintButton || courierPrintButton) {
-    const button = bothPrintButton || kitchenPrintButton || courierPrintButton;
-    const orderId = button.dataset.orderPrintBoth || button.dataset.orderPrintKitchen || button.dataset.orderPrintCourier;
-    const order = deliveryOrdersCache.get(orderId);
+  if (bothPrintButton) {
+    const order = deliveryOrdersCache.get(bothPrintButton.dataset.orderPrintBoth);
     if (!order) { alert('Não foi possível localizar os dados deste pedido. Atualize a lista e tente novamente.'); return; }
-    button.disabled = true;
+    bothPrintButton.disabled = true;
     try {
-      printDeliveryTickets(order, bothPrintButton ? 'both' : kitchenPrintButton ? 'kitchen' : 'courier');
+      printDeliveryTickets(order, 'both');
     } finally {
-      setTimeout(() => { button.disabled = false; }, bothPrintButton ? 6500 : 1200);
+      setTimeout(() => { bothPrintButton.disabled = false; }, 6500);
     }
     return;
   }
