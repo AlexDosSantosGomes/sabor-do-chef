@@ -1195,7 +1195,8 @@ async function loadDeliveryOrders() {
           <button class="danger" type="button" data-order-reject="${order.id}">Cancelar pedido</button>
         ` : ''}
         ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">Marcar como entregue</button>` : ''}
-        ${canPrint ? `<button class="secondary" type="button" data-order-print-kitchen="${order.id}">Imprimir via da cozinha</button>
+        ${canPrint ? `<button class="primary" type="button" data-order-print-both="${order.id}">Imprimir as duas vias</button>
+          <button class="secondary" type="button" data-order-print-kitchen="${order.id}">Imprimir via da cozinha</button>
           <button class="secondary" type="button" data-order-print-courier="${order.id}">Imprimir via do motoboy</button>` : ''}
         ${whatsappUrl ? `<a class="secondary" style="display:inline-block;text-decoration:none;text-align:center" href="${escapeHTML(whatsappUrl)}" target="_blank" rel="noopener noreferrer">Enviar WhatsApp</a>` : '<span class="small">Telefone inválido para WhatsApp</span>'}
       </div>`;
@@ -1313,11 +1314,24 @@ function printDeliveryTickets(order, ticketType = 'both') {
       divider, 'TOTAL: ' + money(order.total_cents), 'ENTREGA GRATIS',
       '', 'Conferir pagamento e endereco.', '', ''
     ].join('\n');
-    // Cada via é enviada como um trabalho RawBT independente.
-    // O corte automático configurado no RawBT acontece ao final de cada trabalho.
+    // No modo "both", envia as duas vias em um único trabalho RawBT.
+    // O comando ESC/POS solicita corte entre as vias; o RawBT mantém o corte final configurado no app.
     const encoder = new TextEncoder();
-    const selectedTicket = ticketType === 'kitchen' ? kitchen : ticketType === 'courier' ? courier : kitchen + '\n\n' + courier;
-    const bytes = encoder.encode(selectedTicket);
+    let bytes;
+    if (ticketType === 'both') {
+      const kitchenBytes = encoder.encode(kitchen);
+      const courierBytes = encoder.encode(courier);
+      const separator = new Uint8Array([
+        0x1B, 0x64, 0x03, // avança três linhas antes do corte
+        0x1D, 0x56, 0x00  // corte total entre as vias (GS V 0)
+      ]);
+      bytes = new Uint8Array(kitchenBytes.length + separator.length + courierBytes.length);
+      bytes.set(kitchenBytes, 0);
+      bytes.set(separator, kitchenBytes.length);
+      bytes.set(courierBytes, kitchenBytes.length + separator.length);
+    } else {
+      bytes = encoder.encode(ticketType === 'kitchen' ? kitchen : courier);
+    }
     let binary = '';
     for (let offset = 0; offset < bytes.length; offset += 0x8000) {
       binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
@@ -1391,18 +1405,19 @@ function printDeliveryTickets(order, ticketType = 'both') {
 }
 
 const handleOrderAction = async (event) => {
+  const bothPrintButton = event.target.closest('[data-order-print-both]');
   const kitchenPrintButton = event.target.closest('[data-order-print-kitchen]');
   const courierPrintButton = event.target.closest('[data-order-print-courier]');
-  if (kitchenPrintButton || courierPrintButton) {
-    const button = kitchenPrintButton || courierPrintButton;
-    const orderId = button.dataset.orderPrintKitchen || button.dataset.orderPrintCourier;
+  if (bothPrintButton || kitchenPrintButton || courierPrintButton) {
+    const button = bothPrintButton || kitchenPrintButton || courierPrintButton;
+    const orderId = button.dataset.orderPrintBoth || button.dataset.orderPrintKitchen || button.dataset.orderPrintCourier;
     const order = deliveryOrdersCache.get(orderId);
     if (!order) { alert('Não foi possível localizar os dados deste pedido. Atualize a lista e tente novamente.'); return; }
     button.disabled = true;
     try {
-      printDeliveryTickets(order, kitchenPrintButton ? 'kitchen' : 'courier');
+      printDeliveryTickets(order, bothPrintButton ? 'both' : kitchenPrintButton ? 'kitchen' : 'courier');
     } finally {
-      setTimeout(() => { button.disabled = false; }, 1200);
+      setTimeout(() => { button.disabled = false; }, bothPrintButton ? 6500 : 1200);
     }
     return;
   }
