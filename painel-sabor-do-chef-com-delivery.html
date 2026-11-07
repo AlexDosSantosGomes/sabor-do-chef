@@ -1195,8 +1195,7 @@ async function loadDeliveryOrders() {
           <button class="danger" type="button" data-order-reject="${order.id}">Cancelar pedido</button>
         ` : ''}
         ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">Marcar como entregue</button>` : ''}
-        ${canPrint ? `<button class="secondary" type="button" data-order-print-kitchen="${order.id}">Imprimir via da cozinha</button>
-          <button class="secondary" type="button" data-order-print-courier="${order.id}">Imprimir via do motoboy</button>` : ''}
+        ${canPrint ? `<button class="secondary" type="button" data-order-print="${order.id}">Imprimir 2 notas</button>` : ''}
         ${whatsappUrl ? `<a class="secondary" style="display:inline-block;text-decoration:none;text-align:center" href="${escapeHTML(whatsappUrl)}" target="_blank" rel="noopener noreferrer">Enviar WhatsApp</a>` : '<span class="small">Telefone inválido para WhatsApp</span>'}
       </div>`;
 
@@ -1313,10 +1312,15 @@ function printDeliveryTickets(order, ticketType = 'both') {
       divider, 'TOTAL: ' + money(order.total_cents), 'ENTREGA GRATIS',
       '', 'Conferir pagamento e endereco.', '', ''
     ].join('\n');
-    // Cada via é enviada como um trabalho RawBT independente.
-    // O corte automático configurado no RawBT acontece ao final de cada trabalho.
+    // Um clique dispara dois trabalhos RawBT independentes para que o corte
+    // automático configurado no aplicativo aconteça entre as vias.
+    if (ticketType === 'both') {
+      printDeliveryTickets(order, 'kitchen');
+      window.setTimeout(() => printDeliveryTickets(order, 'courier'), 3000);
+      return;
+    }
     const encoder = new TextEncoder();
-    const selectedTicket = ticketType === 'kitchen' ? kitchen : ticketType === 'courier' ? courier : kitchen + '\n\n' + courier;
+    const selectedTicket = ticketType === 'kitchen' ? kitchen : courier;
     const bytes = encoder.encode(selectedTicket);
     let binary = '';
     for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -1391,19 +1395,13 @@ function printDeliveryTickets(order, ticketType = 'both') {
 }
 
 const handleOrderAction = async (event) => {
-  const kitchenPrintButton = event.target.closest('[data-order-print-kitchen]');
-  const courierPrintButton = event.target.closest('[data-order-print-courier]');
-  if (kitchenPrintButton || courierPrintButton) {
-    const button = kitchenPrintButton || courierPrintButton;
-    const orderId = button.dataset.orderPrintKitchen || button.dataset.orderPrintCourier;
-    const order = deliveryOrdersCache.get(orderId);
+  const printButton = event.target.closest('[data-order-print]');
+  if (printButton) {
+    const order = deliveryOrdersCache.get(printButton.dataset.orderPrint);
     if (!order) { alert('Não foi possível localizar os dados deste pedido. Atualize a lista e tente novamente.'); return; }
-    button.disabled = true;
-    try {
-      printDeliveryTickets(order, kitchenPrintButton ? 'kitchen' : 'courier');
-    } finally {
-      setTimeout(() => { button.disabled = false; }, 1200);
-    }
+    printButton.disabled = true;
+    printDeliveryTickets(order);
+    setTimeout(() => { printButton.disabled = false; }, 6500);
     return;
   }
   const acceptButton = event.target.closest('[data-order-accept]');
