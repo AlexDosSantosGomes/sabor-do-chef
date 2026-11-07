@@ -1248,6 +1248,81 @@ async function loadDeliveryOrders() {
 }
 
 function printDeliveryTickets(order) {
+  // No Android, envia texto diretamente ao RawBT. Em computadores, mantém a impressão do navegador.
+  if (/Android/i.test(navigator.userAgent)) {
+    const width = 48; // largura aproximada em caracteres para papel térmico de 80 mm
+    const divider = '-'.repeat(width);
+    const wrap = value => {
+      const words = String(value ?? '').split(/\s+/);
+      const lines = [];
+      let line = '';
+      words.forEach(word => {
+        if (!word) return;
+        if (word.length > width) {
+          if (line) { lines.push(line); line = ''; }
+          for (let i = 0; i < word.length; i += width) lines.push(word.slice(i, i + width));
+          return;
+        }
+        if (!line) line = word;
+        else if ((line + ' ' + word).length <= width) line += ' ' + word;
+        else { lines.push(line); line = word; }
+      });
+      if (line) lines.push(line);
+      return lines;
+    };
+    const center = value => {
+      const text = String(value);
+      return text.length >= width ? wrap(text).join('\n') : ' '.repeat(Math.floor((width - text.length) / 2)) + text;
+    };
+    const items = order.order_items || [];
+    const date = new Date(order.created_at).toLocaleString('pt-BR');
+    const paymentNames = { CASH: 'Dinheiro na entrega', PIX: 'Pix na entrega', CARD: 'Cartão na entrega' };
+    const kitchenLines = [];
+    items.forEach(item => {
+      const quantity = Math.max(1, Number(item.quantity) || 1);
+      kitchenLines.push(...wrap(quantity + 'x ' + item.product_name_snapshot));
+      if (item.notes) kitchenLines.push(...wrap('  Obs.: ' + item.notes));
+      for (let unit = 0; unit < quantity; unit++) {
+        const selected = (item.order_item_accompaniments || [])
+          .filter(option => Number(option.unit_index) === unit)
+          .map(option => option.accompaniment_name);
+        if (selected.length) kitchenLines.push(...wrap('  Unidade ' + (unit + 1) + ': ' + selected.join(', ')));
+      }
+      kitchenLines.push('');
+    });
+    const courierLines = [];
+    items.forEach(item => courierLines.push(...wrap(Math.max(1, Number(item.quantity) || 1) + 'x ' + item.product_name_snapshot)));
+    const kitchen = [
+      center('SABOR DO CHEF'), center('VIA DA COZINHA'),
+      center('PEDIDO #' + order.order_number), center(date), divider,
+      'ITENS DO PEDIDO', ...kitchenLines, divider,
+      'OBSERVACAO DO CLIENTE', ...wrap(order.customer_notes || 'Nenhuma'),
+      '', 'Conferir pedido antes de liberar.', '', ''
+    ].join('\n');
+    const courier = [
+      center('SABOR DO CHEF'), center('VIA DO MOTOBOY'),
+      center('PEDIDO #' + order.order_number), center(date), divider,
+      'CLIENTE: ' + (order.customer_name || 'Nao informado'),
+      'TELEFONE: ' + (order.customer_phone || 'Nao informado'),
+      'ENDERECO:', ...wrap(order.delivery_address || 'Nao informado'),
+      divider, 'ITENS:', ...courierLines, divider,
+      'PAGAMENTO: ' + (paymentNames[order.payment_method] || order.payment_method || 'Nao informado'),
+      ...(order.needs_change ? ['CLIENTE PAGA COM: ' + money(order.change_for_cents),
+        'TROCO A DEVOLVER: ' + money(Number(order.change_for_cents) - Number(order.total_cents))] : []),
+      divider, 'TOTAL: ' + money(order.total_cents), 'ENTREGA GRATIS',
+      '', 'Conferir pagamento e endereco.', '', ''
+    ].join('\n');
+    const receiptText = kitchen + '\n\n' + courier;
+    const intentUrl = 'intent:' + encodeURIComponent(receiptText) +
+      '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
+    const link = document.createElement('a');
+    link.href = intentUrl;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return;
+  }
   const items = order.order_items || [];
   const date = new Date(order.created_at).toLocaleString('pt-BR');
   const paymentNames = { CASH: 'Dinheiro na entrega', PIX: 'Pix na entrega', CARD: 'Cartão na entrega' };
