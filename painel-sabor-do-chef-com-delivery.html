@@ -1312,8 +1312,21 @@ function printDeliveryTickets(order) {
       divider, 'TOTAL: ' + money(order.total_cents), 'ENTREGA GRATIS',
       '', 'Conferir pagamento e endereco.', '', ''
     ].join('\n');
-    const receiptText = kitchen + '\n\n' + courier;
-    const intentUrl = 'intent:' + encodeURIComponent(receiptText) +
+    // Envia bytes ESC/POS em Base64 para inserir um corte real entre as duas vias.
+    // O RawBT mantém o corte automático configurado para o fim do trabalho.
+    const encoder = new TextEncoder();
+    const kitchenBytes = encoder.encode(kitchen + '\n\n');
+    const courierBytes = encoder.encode(courier);
+    const payload = new Uint8Array(kitchenBytes.length + 3 + courierBytes.length);
+    payload.set(kitchenBytes, 0);
+    payload.set([0x1D, 0x56, 0x00], kitchenBytes.length); // GS V 0: corte total
+    payload.set(courierBytes, kitchenBytes.length + 3);
+    let binary = '';
+    for (let offset = 0; offset < payload.length; offset += 0x8000) {
+      binary += String.fromCharCode(...payload.subarray(offset, Math.min(offset + 0x8000, payload.length)));
+    }
+    const base64 = btoa(binary);
+    const intentUrl = 'intent:base64,' + base64 +
       '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
     const link = document.createElement('a');
     link.href = intentUrl;
