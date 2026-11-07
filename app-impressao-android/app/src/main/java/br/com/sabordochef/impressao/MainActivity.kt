@@ -5,7 +5,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -13,73 +15,95 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var serviceStatus: TextView
+    private lateinit var status: TextView
+    private lateinit var tokenInput: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestRuntimePermissions()
 
+        val prefs = getSharedPreferences("printer_config", MODE_PRIVATE)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 56, 40, 40)
+            setPadding(40, 48, 40, 40)
         }
-
-        val title = TextView(this).apply {
+        root.addView(TextView(this).apply {
             text = "SABOR DO CHEF"
             textSize = 25f
             setTextColor(0xFFB5121B.toInt())
-        }
-        val subtitle = TextView(this).apply {
+        })
+        root.addView(TextView(this).apply {
             text = "Central de impressão"
             textSize = 18f
-            setPadding(0, 8, 0, 32)
+            setPadding(0, 8, 0, 24)
+        })
+        root.addView(TextView(this).apply {
+            text = "Código de conexão do aparelho"
+            textSize = 14f
+        })
+        tokenInput = EditText(this).apply {
+            hint = "Cole aqui o código fornecido"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(prefs.getString("device_token", ""))
         }
-        serviceStatus = TextView(this).apply {
-            text = "Serviço de impressão: parado"
-            textSize = 16f
-            setPadding(0, 0, 0, 24)
-        }
-        val start = Button(this).apply {
-            text = "Iniciar serviço"
+        root.addView(tokenInput)
+        root.addView(Button(this).apply {
+            text = "Salvar conexão"
             setOnClickListener {
-                ContextCompat.startForegroundService(
-                    this@MainActivity,
-                    Intent(this@MainActivity, PrintService::class.java)
-                )
-                serviceStatus.text = "Serviço de impressão: iniciado"
-            }
-        }
-        val stop = Button(this).apply {
-            text = "Parar serviço"
-            setOnClickListener {
-                stopService(Intent(this@MainActivity, PrintService::class.java))
-                serviceStatus.text = "Serviço de impressão: parado"
-            }
-        }
-        val testPrint = Button(this).apply {
-            text = "Teste de impressão"
-            setOnClickListener {
-                val sample = "SABOR DO CHEF\\nTESTE DE IMPRESSAO\\n\\n".toByteArray(Charsets.UTF_8)
-                try {
-                    RawBtBridge.sendEscPos(this@MainActivity, sample)
-                } catch (_: Exception) {
-                    serviceStatus.text = "Não foi possível abrir o RawBT. Verifique se está instalado."
+                val token = tokenInput.text.toString().trim()
+                if (token.length < 32) {
+                    status.text = "Código inválido. Confira o código recebido."
+                } else {
+                    prefs.edit().putString("device_token", token).apply()
+                    status.text = "Código salvo neste aparelho."
                 }
             }
+        })
+        status = TextView(this).apply {
+            text = "Serviço de impressão: parado"
+            textSize = 15f
+            setPadding(0, 18, 0, 18)
         }
-        val note = TextView(this).apply {
-            text = "Mantenha este aparelho ligado, conectado à internet e pareado com a impressora. A conexão remota com os pedidos será ativada na próxima etapa."
-            textSize = 14f
-            setPadding(0, 28, 0, 0)
-        }
-
-        root.addView(title)
-        root.addView(subtitle)
-        root.addView(serviceStatus)
-        root.addView(start)
-        root.addView(stop)
-        root.addView(testPrint)
-        root.addView(note)
+        root.addView(status)
+        root.addView(Button(this).apply {
+            text = "Iniciar central de impressão"
+            setOnClickListener {
+                val token = prefs.getString("device_token", "").orEmpty()
+                if (token.length < 32) {
+                    status.text = "Primeiro salve o código de conexão."
+                } else {
+                    ContextCompat.startForegroundService(
+                        this@MainActivity,
+                        Intent(this@MainActivity, PrintService::class.java)
+                    )
+                    status.text = "Central iniciada. Aguardando pedidos aprovados."
+                }
+            }
+        })
+        root.addView(Button(this).apply {
+            text = "Parar central"
+            setOnClickListener {
+                stopService(Intent(this@MainActivity, PrintService::class.java))
+                status.text = "Serviço de impressão: parado"
+            }
+        })
+        root.addView(Button(this).apply {
+            text = "Teste de impressão"
+            setOnClickListener {
+                val sample = "SABOR DO CHEF\nTESTE DE IMPRESSAO\n\n".toByteArray(Charsets.UTF_8)
+                try {
+                    RawBtBridge.sendEscPos(this@MainActivity, sample)
+                    status.text = "Teste enviado ao RawBT. Confira a impressora."
+                } catch (e: Exception) {
+                    status.text = "Não foi possível abrir o RawBT: ${e.message ?: "verifique a instalação"}"
+                }
+            }
+        })
+        root.addView(TextView(this).apply {
+            text = "Deixe este Android ligado, conectado à internet e pareado com a Goldensky. A impressão remota só começa quando a central estiver iniciada."
+            textSize = 13f
+            setPadding(0, 24, 0, 0)
+        })
         setContentView(root)
     }
 
@@ -88,11 +112,7 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                100
-            )
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
     }
 }
