@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.SaborDoChef" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#B5121B</item>
+        <item name="colorPrimaryVariant">#8F0E15</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#8F0E15</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+    </style>
+</resources>
