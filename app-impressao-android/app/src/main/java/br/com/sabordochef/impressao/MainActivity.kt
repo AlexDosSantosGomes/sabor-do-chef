@@ -71,12 +71,18 @@ class MainActivity : AppCompatActivity() {
                 val token = prefs.getString("device_token", "").orEmpty()
                 if (token.length < 32) {
                     status.text = "Primeiro salve o código de conexão."
-                } else {
-                    ContextCompat.startForegroundService(
+                } else if (Build.VERSION.SDK_INT >= 31 &&
+                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED
+                ) {
+                    status.text = "Autorize o acesso a dispositivos próximos para iniciar a central."
+                    ActivityCompat.requestPermissions(
                         this@MainActivity,
-                        Intent(this@MainActivity, PrintService::class.java)
+                        arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                        REQUEST_BLUETOOTH
                     )
-                    status.text = "Central iniciada. Aguardando pedidos aprovados."
+                } else {
+                    startPrintingService()
                 }
             }
         })
@@ -107,12 +113,46 @@ class MainActivity : AppCompatActivity() {
         setContentView(root)
     }
 
+    private fun startPrintingService() {
+        try {
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, PrintService::class.java)
+            )
+            status.text = "Central iniciada. Aguardando pedidos aprovados."
+        } catch (e: SecurityException) {
+            status.text = "Permissão necessária: autorize Dispositivos próximos nas configurações do Android."
+        } catch (e: Exception) {
+            status.text = "Não foi possível iniciar a central: ${e.localizedMessage ?: "tente novamente"}"
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_BLUETOOTH) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startPrintingService()
+            } else {
+                status.text = "Permissão de dispositivos próximos negada. Ative-a para iniciar a central."
+            }
+        }
+    }
+
     private fun requestRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
         }
+    }
+
+    companion object {
+        private const val REQUEST_NOTIFICATIONS = 100
+        private const val REQUEST_BLUETOOTH = 101
     }
 }
