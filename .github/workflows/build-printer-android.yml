@@ -1,0 +1,31 @@
+name: Build Android printer app
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app-impressao-android/**"
+      - ".github/workflows/build-printer-android.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Build debug APK
+        working-directory: app-impressao-android
+        run: gradle assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sabor-do-chef-impressao-debug
+          path: app-impressao-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
