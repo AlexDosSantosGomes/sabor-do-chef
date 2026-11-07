@@ -199,7 +199,7 @@ class PrintService : Service() {
 
     private fun buildNotification(message: String): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_print)
+            .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentTitle("Sabor do Chef")
             .setContentText(message)
             .setOngoing(true)
