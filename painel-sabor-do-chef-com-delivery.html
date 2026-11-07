@@ -1312,29 +1312,28 @@ function printDeliveryTickets(order, ticketType = 'both') {
       divider, 'TOTAL: ' + money(order.total_cents), 'ENTREGA GRATIS',
       '', 'Conferir pagamento e endereco.', '', ''
     ].join('\n');
-    // Um clique dispara dois trabalhos RawBT independentes para que o corte
-    // automático configurado no aplicativo aconteça entre as vias.
-    if (ticketType === 'both') {
-      printDeliveryTickets(order, 'kitchen');
-      window.setTimeout(() => printDeliveryTickets(order, 'courier'), 3000);
-      return;
-    }
+    // Envia as duas vias em um único trabalho RawBT. O corte intermediário
+    // separa a via da cozinha da via do motoboy; o RawBT corta ao final do trabalho.
     const encoder = new TextEncoder();
-    const selectedTicket = ticketType === 'kitchen' ? kitchen : courier;
-    const bytes = encoder.encode(selectedTicket);
+    const kitchenBytes = encoder.encode(kitchen);
+    const courierBytes = encoder.encode(courier);
+    const separator = new Uint8Array([
+      0x1B, 0x64, 0x03, // avança o papel três linhas
+      0x1D, 0x56, 0x00  // corte total entre as vias (GS V 0)
+    ]);
+    const combined = new Uint8Array(kitchenBytes.length + separator.length + courierBytes.length);
+    combined.set(kitchenBytes, 0);
+    combined.set(separator, kitchenBytes.length);
+    combined.set(courierBytes, kitchenBytes.length + separator.length);
+
     let binary = '';
-    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+    for (let offset = 0; offset < combined.length; offset += 0x8000) {
+      binary += String.fromCharCode(...combined.subarray(offset, Math.min(offset + 0x8000, combined.length)));
     }
     const base64 = btoa(binary);
-    const intentUrl = 'intent:base64,' + base64 +
-      '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
-    const link = document.createElement('a');
-    link.href = intentUrl;
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+
+    // Esquema documentado pelo RawBT para receber comandos ESC/POS em Base64.
+    window.location.href = 'rawbt:base64,' + base64;
     return;
   }
   const items = order.order_items || [];
