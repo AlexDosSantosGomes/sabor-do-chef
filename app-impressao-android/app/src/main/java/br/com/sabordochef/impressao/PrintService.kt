@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -20,10 +21,17 @@ import kotlin.concurrent.thread
 class PrintService : Service() {
     @Volatile private var running = false
     private var worker: Thread? = null
+    private var cpuWakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        // Mantém a CPU ativa durante a impressão mesmo com a tela apagada.
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        cpuWakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "SaborDoChef:PrintService"
+        ).apply { acquire() }
         startForeground(NOTIFICATION_ID, buildNotification("Central ativa — aguardando pedidos"))
     }
 
@@ -38,6 +46,8 @@ class PrintService : Service() {
     override fun onDestroy() {
         running = false
         worker?.interrupt()
+        cpuWakeLock?.let { if (it.isHeld) it.release() }
+        cpuWakeLock = null
         super.onDestroy()
     }
 
