@@ -13,6 +13,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
@@ -107,17 +108,24 @@ class MainActivity : AppCompatActivity() {
         root.addView(Button(this).apply {
             text = "Teste de impressão"
             setOnClickListener {
-                val sample = "SABOR DO CHEF\nTESTE DE IMPRESSAO\n\n".toByteArray(Charsets.UTF_8)
-                try {
-                    RawBtBridge.sendEscPos(this@MainActivity, sample)
-                    status.text = "Teste enviado ao RawBT. Confira a impressora."
-                } catch (e: Exception) {
-                    status.text = "Não foi possível abrir o RawBT: ${e.message ?: "verifique a instalação"}"
+                status.text = "Conectando à Bluetooth Printer..."
+                val sample = byteArrayOf(0x1B, 0x40) +
+                    "SABOR DO CHEF\nTESTE DE IMPRESSAO\n\n".toByteArray(Charsets.UTF_8) +
+                    byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
+                thread(name = "sabor-print-test") {
+                    try {
+                        BluetoothPrinter.sendEscPos(this@MainActivity, sample)
+                        runOnUiThread { status.text = "Teste enviado à impressora Bluetooth Printer." }
+                    } catch (e: Exception) {
+                        runOnUiThread {
+                            status.text = "Falha no teste: ${e.message ?: "verifique a impressora e o pareamento"}"
+                        }
+                    }
                 }
             }
         })
         root.addView(TextView(this).apply {
-            text = "Deixe este Android ligado, conectado ao carregador, à internet e pareado com a Goldensky. Com a central iniciada, você pode usar outros aplicativos ou apagar a tela. Para maior estabilidade, configure a bateria como Sem restrições."
+            text = "Deixe este Android ligado, conectado ao carregador, à internet e pareado com a impressora Bluetooth Printer. Com a central iniciada, você pode usar outros aplicativos ou apagar a tela. Para maior estabilidade, configure a bateria como Sem restrições."
             textSize = 13f
             setPadding(0, 24, 0, 0)
         })
