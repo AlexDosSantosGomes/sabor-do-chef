@@ -189,9 +189,11 @@ class PrintService : Service() {
 
         val out = java.io.ByteArrayOutputStream()
         out.write(kitchen.toString().toByteArray(Charsets.UTF_8))
+        // Alimenta e corta a via da cozinha.
         out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
         out.write(courier.toString().toByteArray(Charsets.UTF_8))
-        out.write(byteArrayOf(0x1B, 0x64, 0x03))
+        // Alimenta e também corta a última via (entregador).
+        out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
         return out.toByteArray()
     }
 
