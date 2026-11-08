@@ -87,6 +87,17 @@ class MainActivity : AppCompatActivity() {
             }
         })
         root.addView(Button(this).apply {
+            text = "Configurar bateria"
+            setOnClickListener {
+                try {
+                    startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                    status.text = "Nas configurações, permita que o Sabor do Chef use a bateria sem restrições."
+                } catch (e: Exception) {
+                    status.text = "Abra Configurações > Aplicativos > Sabor do Chef > Bateria e selecione Sem restrições."
+                }
+            }
+        })
+        root.addView(Button(this).apply {
             text = "Parar central"
             setOnClickListener {
                 stopService(Intent(this@MainActivity, PrintService::class.java))
@@ -106,7 +117,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
         root.addView(TextView(this).apply {
-            text = "Deixe este Android ligado, conectado à internet e pareado com a Goldensky. A impressão remota só começa quando a central estiver iniciada."
+            text = "Deixe este Android ligado, conectado ao carregador, à internet e pareado com a Goldensky. Com a central iniciada, você pode usar outros aplicativos ou apagar a tela. Para maior estabilidade, configure a bateria como Sem restrições."
             textSize = 13f
             setPadding(0, 24, 0, 0)
         })
