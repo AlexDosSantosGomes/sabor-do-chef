@@ -76,18 +76,18 @@ class PrintService : Service() {
                 val jobId = job.getString("id")
                 try {
                     val bytes = buildTickets(job)
-                    RawBtBridge.sendEscPos(this, bytes)
+                    BluetoothPrinter.sendEscPos(this, bytes)
                     api(token, JSONObject().put("action", "complete").put("job_id", jobId))
-                    updateNotification("Pedido #${job.optJSONObject("order")?.optString("order_number") ?: ""} enviado ao RawBT")
+                    updateNotification("Pedido #${job.optJSONObject("order")?.optString("order_number") ?: ""} impresso via Bluetooth")
                     Thread.sleep(2500)
                 } catch (printError: Exception) {
                     try {
                         api(token, JSONObject()
                             .put("action", "fail")
                             .put("job_id", jobId)
-                            .put("error", printError.message ?: "Falha ao enviar para RawBT"))
+                            .put("error", printError.message ?: "Falha ao enviar via Bluetooth"))
                     } catch (_: Exception) { }
-                    updateNotification("Falha no envio. Verifique RawBT e impressora.")
+                    updateNotification("Falha na impressão. Verifique Bluetooth e impressora.")
                     Thread.sleep(6000)
                 }
             } catch (e: InterruptedException) {
