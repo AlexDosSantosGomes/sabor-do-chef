@@ -37,7 +37,8 @@ object BluetoothPrinter {
 
         var socket: BluetoothSocket? = null
         try {
-            adapter.cancelDiscovery()
+            // Não chamamos cancelDiscovery(): essa operação exige BLUETOOTH_SCAN
+            // no Android 12+, e não é necessária para estabelecer a conexão SPP.
             socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
             socket.connect()
             socket.outputStream.use { output ->
