@@ -161,13 +161,13 @@ class PrintService : Service() {
             }
         }
 
-        val number = order.optString("order_number", "—")
+        val number = order.optString("order_number", "N/I")
         val kitchen = StringBuilder()
         kitchen.append("SABOR DO CHEF\n")
             .append("VIA COZINHA\n")
             .append("--------------------------------\n")
             .append("PEDIDO #").append(number).append("\n")
-            .append("CLIENTE: ").append(order.optString("customer_name", "—")).append("\n")
+            .append("CLIENTE: ").append(order.optString("customer_name", "Não informado")).append("\n")
             .append("--------------------------------\n")
         if (items != null) {
             for (i in 0 until items.length()) {
@@ -185,8 +185,11 @@ class PrintService : Service() {
         }
         kitchen.append("\n\n")
 
-        val currency = "R$ " + NumberFormat.getNumberInstance(Locale("pt", "BR"))
-            .format(order.optInt("total_cents", 0) / 100.0)
+        val amountFormat = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+        }
+        val currency = "R$ " + amountFormat.format(order.optInt("total_cents", 0) / 100.0)
         val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
             "CASH" -> "Dinheiro na entrega"
             "PIX" -> "Pix na entrega"
@@ -201,8 +204,8 @@ class PrintService : Service() {
             .append("--------------------------------\n")
             .append("PEDIDO #").append(number).append("\n")
             .append("CLIENTE: ").append(order.optString("customer_name", "—")).append("\n")
-            .append("TELEFONE: ").append(order.optString("customer_phone", "—")).append("\n")
-            .append("ENDEREÇO: ").append(order.optString("delivery_address", "—")).append("\n")
+            .append("TELEFONE: ").append(order.optString("customer_phone", "Não informado")).append("\n")
+            .append("ENDEREÇO: ").append(order.optString("delivery_address", "Não informado")).append("\n")
             .append("PAGAMENTO: ").append(payment).append("\n")
             .append("TOTAL: ").append(currency).append("\n")
             .append("--------------------------------\n")
