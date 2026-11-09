@@ -31,7 +31,7 @@ object BluetoothPrinter {
 
     fun state(): State = when {
         connecting -> State.CONNECTING
-        socket?.let { it.isConnected && !it.isClosed } == true -> State.CONNECTED
+        socket?.let { it.isConnected } == true -> State.CONNECTED
         else -> State.DISCONNECTED
     }
 
@@ -65,8 +65,8 @@ object BluetoothPrinter {
                 )
 
                 // O socket candidato é fechado também se o limite de conexão expirar.
-                candidate = device.createRfcommSocketToServiceRecord(SPP_UUID)
-                val connectingSocket = candidate
+                val connectingSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+                candidate = connectingSocket
                 val future = executor.submit { connectingSocket.connect() }
                 try {
                     future.get(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -94,8 +94,9 @@ object BluetoothPrinter {
         val active = socket ?: throw IOException("A conexão Bluetooth não está disponível.")
         try {
             // Não usar use{}: fechar o stream encerraria a conexão persistente.
-            active.outputStream.write(bytes)
-            active.outputStream.flush()
+            val output = active.outputStream
+            output.write(bytes)
+            output.flush()
         } catch (e: Exception) {
             disconnect()
             throw IOException(e.message ?: "Falha ao enviar dados à impressora.", e)
