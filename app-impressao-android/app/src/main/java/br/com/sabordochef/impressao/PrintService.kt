@@ -64,20 +64,20 @@ class PrintService : Service() {
 
         while (running && !Thread.currentThread().isInterrupted) {
             try {
+                val prefs = getSharedPreferences("printer_config", MODE_PRIVATE)
+                val pendingAckId = prefs.getString("pending_ack_job_id", null)
+                if (!pendingAckId.isNullOrBlank()) {
+                    if (confirmSentJob(token, pendingAckId)) Thread.sleep(1500)
+                    else Thread.sleep(8000)
+                    continue
+                }
+
                 val response = api(token, JSONObject().put("action", "claim"))
                 if (response.has("error")) throw IllegalStateException(response.optString("error"))
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
                     Thread.sleep(8000)
-                    continue
-                }
-
-                val prefs = getSharedPreferences("printer_config", MODE_PRIVATE)
-                val pendingAckId = prefs.getString("pending_ack_job_id", null)
-                if (!pendingAckId.isNullOrBlank()) {
-                    if (confirmSentJob(token, pendingAckId)) Thread.sleep(1500)
-                    else Thread.sleep(8000)
                     continue
                 }
 
