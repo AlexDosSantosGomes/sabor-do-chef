@@ -310,6 +310,7 @@ button:active{transform:translateY(1px)}
         <div>
           <h3 style="margin:0">Últimas impressões</h3>
           <p class="muted" style="margin:4px 0 0">Acompanhe a fila, tentativas e confirmações recebidas pelo aplicativo.</p>
+          <p class="muted" style="margin:4px 0 0">“Enviado à impressora” confirma o envio Bluetooth registrado pelo APK; não detecta fisicamente a saída do papel.</p>
         </div>
         <button class="secondary" id="refreshPrinterJobsBtn" type="button">Atualizar fila</button>
       </div>
@@ -1732,6 +1733,14 @@ async function loadPrinterJobs() {
 }
 
 $('refreshPrinterJobsBtn').addEventListener('click', loadPrinterJobs);
+
+// Mantém o monitoramento atualizado enquanto a seção de impressão estiver aberta.
+setInterval(() => {
+  const panel = document.querySelector('[data-admin-section="printer"]');
+  if (panel && !panel.classList.contains('admin-section-hidden')) {
+    refreshPrinterDevices();
+  }
+}, 15000);
 
 $('generatePrinterCodeBtn').addEventListener('click', async () => {
   const button = $('generatePrinterCodeBtn');
