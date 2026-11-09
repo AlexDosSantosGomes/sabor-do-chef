@@ -82,8 +82,8 @@ class PrintService : Service() {
                 }
 
                 val jobId = job.getString("id")
-                val bytes = buildTickets(job)
                 try {
+                    val bytes = buildTickets(job)
                     BluetoothPrinter.sendEscPos(this, bytes)
                 } catch (printError: Exception) {
                     try {
