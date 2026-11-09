@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.widget.Button
 import android.widget.EditText
@@ -17,7 +19,16 @@ import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
+    private lateinit var printerStatus: TextView
+    private lateinit var printMetrics: TextView
     private lateinit var tokenInput: EditText
+    private val handler = Handler(Looper.getMainLooper())
+    private val statusRefresh = object : Runnable {
+        override fun run() {
+            refreshPrinterStatus()
+            handler.postDelayed(this, 1000L)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,8 +47,20 @@ class MainActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "Central de impressão"
             textSize = 18f
-            setPadding(0, 8, 0, 24)
+            setPadding(0, 8, 0, 16)
         })
+        printerStatus = TextView(this).apply {
+            text = "Impressora: desconectada"
+            textSize = 16f
+            setPadding(0, 8, 0, 8)
+        }
+        root.addView(printerStatus)
+        printMetrics = TextView(this).apply {
+            text = "Ainda não há impressão registrada nesta versão."
+            textSize = 13f
+            setPadding(0, 0, 0, 16)
+        }
+        root.addView(printMetrics)
         root.addView(TextView(this).apply {
             text = "Código de conexão do aparelho"
             textSize = 14f
@@ -130,6 +153,37 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, 24, 0, 0)
         })
         setContentView(root)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        handler.removeCallbacks(statusRefresh)
+        handler.post(statusRefresh)
+    }
+
+    override fun onPause() {
+        handler.removeCallbacks(statusRefresh)
+        super.onPause()
+    }
+
+    private fun refreshPrinterStatus() {
+        val prefs = getSharedPreferences("printer_config", MODE_PRIVATE)
+        val state = prefs.getString("printer_connection_state", "DISCONNECTED")
+        val detail = prefs.getString("printer_connection_detail", "")
+        printerStatus.text = when (state) {
+            "CONNECTED" -> "● Impressora conectada — Bluetooth Printer"
+            "RECONNECTING" -> "◌ Tentando conectar à impressora..."
+            else -> "○ Impressora desconectada" + if (detail.isNullOrBlank()) "" else "\\n$detail"
+        }
+        val total = prefs.getLong("last_print_total_ms", 0L)
+        val claim = prefs.getLong("last_claim_ms", 0L)
+        val send = prefs.getLong("last_send_ms", 0L)
+        val ack = prefs.getLong("last_ack_ms", 0L)
+        printMetrics.text = if (total > 0L) {
+            "Última impressão confirmada: ${total} ms\\nBusca: ${claim} ms · Envio Bluetooth: ${send} ms · Confirmação: ${ack} ms"
+        } else {
+            "Aguardando a primeira impressão para registrar os tempos."
+        }
     }
 
     private fun startPrintingService() {
