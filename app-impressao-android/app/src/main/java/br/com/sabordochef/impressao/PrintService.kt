@@ -64,6 +64,14 @@ class PrintService : Service() {
 
         while (running && !Thread.currentThread().isInterrupted) {
             try {
+                val prefs = getSharedPreferences("printer_config", MODE_PRIVATE)
+                val pendingAckId = prefs.getString("pending_ack_job_id", null)
+                if (!pendingAckId.isNullOrBlank()) {
+                    if (confirmSentJob(token, pendingAckId)) Thread.sleep(1500)
+                    else Thread.sleep(8000)
+                    continue
+                }
+
                 val response = api(token, JSONObject().put("action", "claim"))
                 if (response.has("error")) throw IllegalStateException(response.optString("error"))
                 val job = response.optJSONObject("job")
@@ -77,9 +85,6 @@ class PrintService : Service() {
                 try {
                     val bytes = buildTickets(job)
                     BluetoothPrinter.sendEscPos(this, bytes)
-                    api(token, JSONObject().put("action", "complete").put("job_id", jobId))
-                    updateNotification("Pedido #${job.optJSONObject("order")?.optString("order_number") ?: ""} impresso via Bluetooth")
-                    Thread.sleep(2500)
                 } catch (printError: Exception) {
                     try {
                         api(token, JSONObject()
@@ -87,9 +92,16 @@ class PrintService : Service() {
                             .put("job_id", jobId)
                             .put("error", printError.message ?: "Falha ao enviar via Bluetooth"))
                     } catch (_: Exception) { }
-                    updateNotification("Falha na impressão. Verifique Bluetooth e impressora.")
-                    Thread.sleep(6000)
+                    updateNotification("Impressora indisponível. Pedido guardado para nova tentativa.")
+                    Thread.sleep(8000)
+                    continue
                 }
+
+                // Salva o ACK antes de qualquer nova busca. Se a internet cair após o envio,
+                // o APK confirma a tarefa sem mandar a mesma nota novamente.
+                prefs.edit().putString("pending_ack_job_id", jobId).apply()
+                if (confirmSentJob(token, jobId)) Thread.sleep(1500)
+                else Thread.sleep(8000)
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
             } catch (e: Exception) {
@@ -98,6 +110,19 @@ class PrintService : Service() {
                     Thread.currentThread().interrupt()
                 }
             }
+        }
+    }
+
+    private fun confirmSentJob(token: String, jobId: String): Boolean {
+        return try {
+            api(token, JSONObject().put("action", "complete").put("job_id", jobId))
+            getSharedPreferences("printer_config", MODE_PRIVATE)
+                .edit().remove("pending_ack_job_id").apply()
+            updateNotification("Pedido enviado à impressora e registrado no painel")
+            true
+        } catch (_: Exception) {
+            updateNotification("Nota enviada; aguardando confirmação do painel.")
+            false
         }
     }
 
@@ -160,8 +185,16 @@ class PrintService : Service() {
         }
         kitchen.append("\n\n")
 
-        val currency = NumberFormat.getCurrencyInstance(Locale("pt", "BR"))
+        val currency = "R$ " + NumberFormat.getNumberInstance(Locale("pt", "BR"))
             .format(order.optInt("total_cents", 0) / 100.0)
+        val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
+            "CASH" -> "Dinheiro na entrega"
+            "PIX" -> "Pix na entrega"
+            "CARD" -> "Cartão na entrega"
+            "PAGAMENTO_NA_ENTREGA" -> "Pagamento na entrega"
+            else -> order.optString("payment_method", "Pagamento na entrega")
+                .replace("_", " ")
+        }
         val courier = StringBuilder()
             .append("SABOR DO CHEF\n")
             .append("VIA ENTREGADOR\n")
@@ -169,9 +202,8 @@ class PrintService : Service() {
             .append("PEDIDO #").append(number).append("\n")
             .append("CLIENTE: ").append(order.optString("customer_name", "—")).append("\n")
             .append("TELEFONE: ").append(order.optString("customer_phone", "—")).append("\n")
-            .append("ENDERECO: ").append(order.optString("delivery_address", "—")).append("\n")
-            .append("PAGAMENTO: ").append(order.optString("payment_method", "—")).append("\n")
-            .append("ENTREGA: GRATIS\n")
+            .append("ENDEREÇO: ").append(order.optString("delivery_address", "—")).append("\n")
+            .append("PAGAMENTO: ").append(payment).append("\n")
             .append("TOTAL: ").append(currency).append("\n")
             .append("--------------------------------\n")
             .append("ITENS\n")
@@ -188,10 +220,11 @@ class PrintService : Service() {
         courier.append("\n\n")
 
         val out = java.io.ByteArrayOutputStream()
-        out.write(kitchen.toString().toByteArray(Charsets.UTF_8))
+        out.write(PrinterText.initialize())
+        out.write(PrinterText.encode(kitchen.toString()))
         // Alimenta e corta a via da cozinha.
         out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
-        out.write(courier.toString().toByteArray(Charsets.UTF_8))
+        out.write(PrinterText.encode(courier.toString()))
         // Alimenta e também corta a última via (entregador).
         out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
         return out.toByteArray()
