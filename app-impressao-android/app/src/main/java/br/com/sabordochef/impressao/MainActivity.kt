@@ -110,7 +110,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener {
                 status.text = "Conectando à Bluetooth Printer..."
                 val sample = PrinterText.initialize() +
-                    PrinterText.encode("SABOR DO CHEF\\nTESTE DE IMPRESSÃO\\nAÇÃO • CAFÉ • CORAÇÃO\\n\\n") +
+                    PrinterText.encode("SABOR DO CHEF\\nTESTE DE IMPRESSÃO\\nAÇÃO - CAFÉ - CORAÇÃO\\n\\n") +
                     byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
                 thread(name = "sabor-print-test") {
                     try {
