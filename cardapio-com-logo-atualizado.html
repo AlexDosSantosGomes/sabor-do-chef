@@ -111,15 +111,18 @@ body.success-screen #success-screen{display:block}
 #store-closed-banner small{display:block;margin-top:4px;font-weight:500;color:#6b5254}
 body.store-closed .mobile{display:none!important}
 
-/* Cabeçalho renovado — mantém a imagem/logo original */
-header{background:linear-gradient(125deg,#8f0d15 0%,#b5121b 58%,#d21e29 100%);border-bottom:4px solid #f0d9d9;box-shadow:0 7px 24px #5b080d30;padding:22px 16px}
-.brand-wrap{gap:18px}
-.brand-logo{background:#fff;border:2px solid #fff;box-shadow:0 6px 20px #47070b55}
-.brand{color:#fff;font-size:31px;font-weight:900;letter-spacing:-.5px}
-.sub{color:#fff;opacity:1;font-size:17px;font-weight:750;margin-top:7px}
-.header-description{color:#fff;opacity:.92;font-size:13px;margin-top:4px;line-height:1.45}
-.tag{display:inline-flex;background:#fff;color:#9f1019;border:1px solid #fff;border-radius:30px;padding:8px 14px;margin-top:12px;font-size:13px;font-weight:800;box-shadow:0 4px 12px #58070b25}
-@media(max-width:480px){header{padding:16px 13px}.brand-wrap{gap:13px}.brand-logo{width:70px;height:70px}.brand{font-size:23px}.sub{font-size:14px}.header-description{font-size:11px}.tag{font-size:11px;padding:7px 11px;margin-top:9px}}
+/* Cabeçalho premium — preserva a logo original e destaca a identidade da marca */
+header{position:relative;isolation:isolate;overflow:hidden;background:radial-gradient(ellipse at 88% 12%,#ed5960 0%,transparent 34%),linear-gradient(120deg,#790b13 0%,#b5121b 52%,#d5232d 100%);border-bottom:5px solid #e7c77e;box-shadow:0 9px 28px #5b080d2b;padding:27px 18px}
+header:before{content:"";position:absolute;z-index:-1;width:310px;height:310px;right:-105px;top:-175px;border:1px solid #ffffff25;border-radius:50%;box-shadow:0 0 0 24px #ffffff08,0 0 0 48px #ffffff06}
+header>div{max-width:1080px}
+.brand-wrap{gap:24px;align-items:center;position:relative}
+.brand-logo{width:108px;height:108px;object-fit:contain;background:#fff;border:3px solid #fff;border-radius:24px;box-shadow:0 9px 26px #43060b66; padding:3px}
+.brand{color:#fff;font-size:35px;font-weight:950;letter-spacing:-.9px;line-height:1.08;text-shadow:0 2px 8px #55070c30}
+.sub{color:#fff;opacity:1;font-size:19px;font-weight:800;letter-spacing:.05px;margin-top:8px}
+.header-description{color:#fff;opacity:.94;font-size:14px;margin-top:5px;line-height:1.5;max-width:560px}
+.tag{display:inline-flex;align-items:center;gap:7px;background:#fff;color:#9f1019;border:1px solid #f4e4c4;border-radius:30px;padding:9px 16px;margin-top:14px;font-size:13px;font-weight:850;box-shadow:0 5px 15px #58070b35}
+@media(max-width:600px){header{padding:19px 14px 20px}.brand-wrap{gap:15px}.brand-logo{width:82px;height:82px;border-radius:19px;padding:2px}.brand{font-size:26px;letter-spacing:-.6px}.sub{font-size:15px;margin-top:6px}.header-description{font-size:12px;line-height:1.4}.tag{font-size:11px;padding:7px 12px;margin-top:10px}}
+@media(max-width:370px){.brand-wrap{gap:11px}.brand-logo{width:70px;height:70px;border-radius:16px}.brand{font-size:23px}.sub{font-size:13px}.header-description{font-size:11px}.tag{font-size:10px;padding:6px 10px}}
 
 </style></head>
 <body>
