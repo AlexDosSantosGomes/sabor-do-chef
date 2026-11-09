@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - atualizacao/fila-impressao-ptbr-v0-2
+      - feature/controle-impressao-seguro
+      - feature/apk31-central-impressao-persistente
     paths:
       - "app-impressao-android/**"
       - ".github/workflows/build-android-print-apk.yml"
@@ -33,6 +35,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install Android 36 SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
@@ -48,7 +52,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: sabor-do-chef-impressao-v0.2.0
+          name: sabor-do-chef-apk31-debug
           path: app-impressao-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
