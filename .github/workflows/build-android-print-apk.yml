@@ -7,6 +7,7 @@ on:
       - main
       - atualizacao/fila-impressao-ptbr-v0-2
       - feature/controle-impressao-seguro
+      - feature/apk31-central-impressao-persistente
     paths:
       - "app-impressao-android/**"
       - ".github/workflows/build-android-print-apk.yml"
@@ -49,7 +50,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: sabor-do-chef-impressao-v0.2.0
+          name: sabor-do-chef-apk31-debug
           path: app-impressao-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
