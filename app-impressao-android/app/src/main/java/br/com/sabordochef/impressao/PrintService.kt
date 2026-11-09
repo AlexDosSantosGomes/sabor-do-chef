@@ -185,11 +185,7 @@ class PrintService : Service() {
         }
         kitchen.append("\n\n")
 
-        val amountFormat = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply {
-            minimumFractionDigits = 2
-            maximumFractionDigits = 2
-        }
-        val currency = "R$ " + amountFormat.format(order.optInt("total_cents", 0) / 100.0)
+        val currency = formatCurrencyCents(order.optLong("total_cents", 0L))
         val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
             "CASH" -> "Dinheiro na entrega"
             "PIX" -> "Pix na entrega"
@@ -231,6 +227,17 @@ class PrintService : Service() {
         // Alimenta e também corta a última via (entregador).
         out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
         return out.toByteArray()
+    }
+
+    /**
+     * Formata centavos sem conversão para Double, evitando arredondamentos
+     * e garantindo a vírgula decimal usada nas notas brasileiras.
+     */
+    private fun formatCurrencyCents(totalCents: Long): String {
+        val whole = totalCents / 100
+        val cents = kotlin.math.abs(totalCents % 100).toString().padStart(2, '0')
+        val integerFormat = NumberFormat.getIntegerInstance(Locale("pt", "BR"))
+        return "R$ ${integerFormat.format(whole)},$cents"
     }
 
     private fun updateNotification(message: String) {
