@@ -133,7 +133,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener {
                 status.text = "Conectando à Bluetooth Printer..."
                 val sample = PrinterText.initialize() +
-                    PrinterText.encode("SABOR DO CHEF\\nTESTE DE IMPRESSÃO\\nAÇÃO - CAFÉ - CORAÇÃO\\n\\n") +
+                    PrinterText.encode("SABOR DO CHEF\nTESTE DE IMPRESSÃO\nAÇÃO - CAFÉ - CORAÇÃO\n\n") +
                     byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
                 thread(name = "sabor-print-test") {
                     try {
@@ -173,14 +173,15 @@ class MainActivity : AppCompatActivity() {
         printerStatus.text = when (state) {
             "CONNECTED" -> "● Impressora conectada — Bluetooth Printer"
             "RECONNECTING" -> "◌ Tentando conectar à impressora..."
-            else -> "○ Impressora desconectada" + if (detail.isNullOrBlank()) "" else "\\n$detail"
+            else -> "○ Impressora desconectada" + if (detail.isNullOrBlank()) "" else "\n$detail"
         }
         val total = prefs.getLong("last_print_total_ms", 0L)
         val claim = prefs.getLong("last_claim_ms", 0L)
+        val connect = prefs.getLong("last_connect_ms", 0L)
         val send = prefs.getLong("last_send_ms", 0L)
         val ack = prefs.getLong("last_ack_ms", 0L)
         printMetrics.text = if (total > 0L) {
-            "Última impressão confirmada: ${total} ms\\nBusca: ${claim} ms · Envio Bluetooth: ${send} ms · Confirmação: ${ack} ms"
+            "Última impressão confirmada: ${total} ms\nConexão: ${connect} ms · Busca: ${claim} ms\nEnvio Bluetooth: ${send} ms · Confirmação: ${ack} ms"
         } else {
             "Aguardando a primeira impressão para registrar os tempos."
         }
