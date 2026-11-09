@@ -96,13 +96,15 @@ class MainActivity : AppCompatActivity() {
                 if (token.length < 32) {
                     status.text = "Primeiro salve o código de conexão."
                 } else if (Build.VERSION.SDK_INT >= 31 &&
-                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT)
-                    != PackageManager.PERMISSION_GRANTED
+                    (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT)
+                        != PackageManager.PERMISSION_GRANTED ||
+                     ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_SCAN)
+                        != PackageManager.PERMISSION_GRANTED)
                 ) {
                     status.text = "Autorize o acesso a dispositivos próximos para iniciar a central."
                     ActivityCompat.requestPermissions(
                         this@MainActivity,
-                        arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                        arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN),
                         REQUEST_BLUETOOTH
                     )
                 } else {
@@ -208,7 +210,7 @@ class MainActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_BLUETOOTH) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                 startPrintingService()
             } else {
                 status.text = "Permissão de dispositivos próximos negada. Ative-a para iniciar a central."
