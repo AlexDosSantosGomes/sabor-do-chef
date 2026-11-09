@@ -305,17 +305,6 @@ button:active{transform:translateY(1px)}
       </div>
       <div id="printerDevicesList" class="product-list" style="margin-top:12px">Consulte os aparelhos vinculados.</div>
     </div>
-    <div style="margin-top:18px;padding:16px;border:1px solid #e9eaf0;border-radius:14px;background:#fff">
-      <div class="toolbar" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
-        <div>
-          <h3 style="margin:0">Últimas impressões</h3>
-          <p class="muted" style="margin:4px 0 0">Acompanhe a fila, tentativas e confirmações recebidas pelo aplicativo.</p>
-          <p class="muted" style="margin:4px 0 0">“Enviado à impressora” confirma o envio Bluetooth registrado pelo APK; não detecta fisicamente a saída do papel.</p>
-        </div>
-        <button class="secondary" id="refreshPrinterJobsBtn" type="button">Atualizar fila</button>
-      </div>
-      <div id="printerJobsList" class="product-list" style="margin-top:12px">Carregando histórico de impressão...</div>
-    </div>
   </section>
 
   <section class="panel" data-admin-section="products">
@@ -1668,79 +1657,16 @@ async function refreshPrinterDevices() {
   try {
     const data = await printerAdminRequest({ action: 'admin_status' });
     const devices = data.devices || [];
-    if (!devices.length) {
-      list.innerHTML = '<p class="muted">Nenhum aparelho vinculado ainda.</p>';
-    } else {
-      list.innerHTML = devices.map(device => {
-        const seen = device.last_seen_at ? new Date(device.last_seen_at) : null;
-        const online = !!seen && (Date.now() - seen.getTime()) < 120000;
-        const status = online ? 'Central ativa' : 'Aguardando conexão';
-        const lastSeen = seen ? seen.toLocaleString('pt-BR') : 'Ainda não iniciou';
-        return '<article class="product"><div class="product-info"><strong>' + escapeHTML(device.name || 'Central Android') + '</strong><small><span class="status ' + (online ? '' : 'off') + '">' + status + '</span><br>Último contato: ' + escapeHTML(lastSeen) + '</small></div></article>';
-      }).join('');
-    }
-  } catch (error) {
-    list.textContent = 'Não foi possível consultar os aparelhos: ' + (error.message || error);
-  }
-  await loadPrinterJobs();
+    if (!devices.length) { list.innerHTML = '<p class="muted">Nenhum aparelho vinculado ainda.</p>'; return; }
+    list.innerHTML = devices.map(device => {
+      const seen = device.last_seen_at ? new Date(device.last_seen_at) : null;
+      const online = !!seen && (Date.now() - seen.getTime()) < 120000;
+      const status = online ? 'Central ativa' : 'Aguardando conexão';
+      const lastSeen = seen ? seen.toLocaleString('pt-BR') : 'Ainda não iniciou';
+      return '<article class="product"><div class="product-info"><strong>' + escapeHTML(device.name || 'Central Android') + '</strong><small><span class="status ' + (online ? '' : 'off') + '">' + status + '</span><br>Último contato: ' + escapeHTML(lastSeen) + '</small></div></article>';
+    }).join('');
+  } catch (error) { list.textContent = 'Não foi possível consultar os aparelhos: ' + (error.message || error); }
 }
-
-async function loadPrinterJobs() {
-  const list = $('printerJobsList');
-  if (!list) return;
-  list.textContent = 'Carregando histórico de impressão...';
-  const { data, error } = await supabase
-    .from('print_jobs')
-    .select('id, status, attempt_count, last_error, printed_at, last_attempt_at, next_attempt_at, created_at, orders(order_number, customer_name)')
-    .order('created_at', { ascending: false })
-    .limit(30);
-  if (error) {
-    list.textContent = 'Não foi possível consultar as impressões: ' + error.message;
-    return;
-  }
-  if (!data?.length) {
-    list.innerHTML = '<p class="muted">Ainda não há tarefas de impressão.</p>';
-    return;
-  }
-  const statusInfo = job => {
-    if (job.status === 'IMPRESSO') return { label: 'Enviado à impressora', color: '#16723a', bg: '#e8f7ed' };
-    if (job.status === 'PROCESSANDO') return { label: 'Enviando para impressora', color: '#805500', bg: '#fff2d8' };
-    if (job.status === 'PENDENTE' && job.last_error) return { label: 'Aguardando nova tentativa', color: '#805500', bg: '#fff2d8' };
-    if (job.status === 'PENDENTE') return { label: 'Aguardando impressão', color: '#555', bg: '#eee' };
-    return { label: 'Falha', color: '#a40000', bg: '#fff0f0' };
-  };
-  list.innerHTML = data.map(job => {
-    const status = statusInfo(job);
-    const order = job.orders || {};
-    const orderNumber = order.order_number ? '#' + order.order_number : 'Pedido';
-    const customer = order.customer_name || 'Cliente não identificado';
-    const date = job.printed_at
-      ? 'Envio confirmado: ' + new Date(job.printed_at).toLocaleString('pt-BR')
-      : job.last_attempt_at
-        ? 'Última tentativa: ' + new Date(job.last_attempt_at).toLocaleString('pt-BR')
-        : 'Criado: ' + new Date(job.created_at).toLocaleString('pt-BR');
-    const retry = job.status === 'PENDENTE' && job.next_attempt_at && new Date(job.next_attempt_at) > new Date()
-      ? '<small class="muted">Nova tentativa prevista para ' + escapeHTML(new Date(job.next_attempt_at).toLocaleString('pt-BR')) + '</small>'
-      : '';
-    const errorText = job.last_error
-      ? '<small class="message error">' + escapeHTML(job.last_error) + '</small>'
-      : '';
-    return '<article class="product"><div class="product-info"><strong>' + escapeHTML(orderNumber) + ' · ' + escapeHTML(customer) + '</strong>' +
-      '<div><span class="status" style="color:' + status.color + ';background:' + status.bg + '">' + status.label + '</span></div>' +
-      '<small class="muted">' + escapeHTML(date) + ' · Tentativas: ' + Number(job.attempt_count || 0) + '</small>' +
-      retry + errorText + '</div></article>';
-  }).join('');
-}
-
-$('refreshPrinterJobsBtn').addEventListener('click', loadPrinterJobs);
-
-// Mantém o monitoramento atualizado enquanto a seção de impressão estiver aberta.
-setInterval(() => {
-  const panel = document.querySelector('[data-admin-section="printer"]');
-  if (panel && !panel.classList.contains('admin-section-hidden')) {
-    refreshPrinterDevices();
-  }
-}, 15000);
 
 $('generatePrinterCodeBtn').addEventListener('click', async () => {
   const button = $('generatePrinterCodeBtn');
