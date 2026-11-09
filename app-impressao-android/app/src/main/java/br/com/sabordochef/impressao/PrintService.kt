@@ -72,7 +72,9 @@ class PrintService : Service() {
                     savePrinterState(STATE_RECONNECTING, "Tentando conectar à Bluetooth Printer")
                     updateNotification("Impressora: tentando conectar")
                     try {
+                        val connectStarted = System.nanoTime()
                         BluetoothPrinter.connect(this)
+                        prefs.edit().putLong("last_connect_ms", elapsedMs(connectStarted)).apply()
                         savePrinterState(STATE_CONNECTED, "Bluetooth Printer conectada")
                         updateNotification("Impressora conectada — aguardando pedidos")
                     } catch (connectionError: Exception) {
@@ -194,7 +196,7 @@ class PrintService : Service() {
     private fun buildTickets(job: JSONObject): ByteArray {
         val order = job.getJSONObject("order")
         val items = job.optJSONArray("items")
-        val accompaniments = job.optJSONArray("accompaniments)
+        val accompaniments = job.optJSONArray("accompaniments")
         val accByItem = mutableMapOf<String, MutableList<String>>()
         if (accompaniments != null) {
             for (i in 0 until accompaniments.length()) {
@@ -206,27 +208,27 @@ class PrintService : Service() {
 
         val number = order.optString("order_number", "N/I")
         val kitchen = StringBuilder()
-            .append("SABOR DO CHEF\\n")
-            .append("VIA COZINHA\\n")
-            .append("--------------------------------\\n")
-            .append("PEDIDO #").append(number).append("\\n")
-            .append("CLIENTE: ").append(order.optString("customer_name", "Não informado")).append("\\n")
-            .append("--------------------------------\\n")
+            .append("SABOR DO CHEF\n")
+            .append("VIA COZINHA\n")
+            .append("--------------------------------\n")
+            .append("PEDIDO #").append(number).append("\n")
+            .append("CLIENTE: ").append(order.optString("customer_name", "Não informado")).append("\n")
+            .append("--------------------------------\n")
         if (items != null) {
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
                 kitchen.append(item.optInt("quantity", 1)).append("x ")
-                    .append(item.optString("product_name_snapshot")).append("\\n")
-                accByItem[item.optString("id")]?.forEach { kitchen.append("  + ").append(it).append("\\n") }
+                    .append(item.optString("product_name_snapshot")).append("\n")
+                accByItem[item.optString("id")]?.forEach { kitchen.append("  + ").append(it).append("\n") }
                 val notes = item.optString("notes")
-                if (notes.isNotBlank() && notes != "null") kitchen.append("  Obs: ").append(notes).append("\\n")
+                if (notes.isNotBlank() && notes != "null") kitchen.append("  Obs: ").append(notes).append("\n")
             }
         }
         val customerNotes = order.optString("customer_notes")
         if (customerNotes.isNotBlank() && customerNotes != "null") {
-            kitchen.append("--------------------------------\\nOBS: ").append(customerNotes).append("\\n")
+            kitchen.append("--------------------------------\nOBS: ").append(customerNotes).append("\n")
         }
-        kitchen.append("\\n\\n")
+        kitchen.append("\n\n")
 
         val currency = formatCurrencyCents(order.optLong("total_cents", 0L))
         val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
@@ -237,27 +239,27 @@ class PrintService : Service() {
             else -> order.optString("payment_method", "Pagamento na entrega").replace("_", " ")
         }
         val courier = StringBuilder()
-            .append("SABOR DO CHEF\\n")
-            .append("VIA ENTREGADOR\\n")
-            .append("--------------------------------\\n")
-            .append("PEDIDO #").append(number).append("\\n")
-            .append("CLIENTE: ").append(order.optString("customer_name", "—")).append("\\n")
-            .append("TELEFONE: ").append(order.optString("customer_phone", "Não informado")).append("\\n")
-            .append("ENDEREÇO: ").append(order.optString("delivery_address", "Não informado")).append("\\n")
-            .append("PAGAMENTO: ").append(payment).append("\\n")
-            .append("TOTAL: ").append(currency).append("\\n")
-            .append("--------------------------------\\nITENS\\n")
+            .append("SABOR DO CHEF\n")
+            .append("VIA ENTREGADOR\n")
+            .append("--------------------------------\n")
+            .append("PEDIDO #").append(number).append("\n")
+            .append("CLIENTE: ").append(order.optString("customer_name", "—")).append("\n")
+            .append("TELEFONE: ").append(order.optString("customer_phone", "Não informado")).append("\n")
+            .append("ENDEREÇO: ").append(order.optString("delivery_address", "Não informado")).append("\n")
+            .append("PAGAMENTO: ").append(payment).append("\n")
+            .append("TOTAL: ").append(currency).append("\n")
+            .append("--------------------------------\nITENS\n")
         if (items != null) {
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
                 courier.append(item.optInt("quantity", 1)).append("x ")
-                    .append(item.optString("product_name_snapshot")).append("\\n")
-                accByItem[item.optString("id")]?.forEach { courier.append("  + ").append(it).append("\\n") }
+                    .append(item.optString("product_name_snapshot")).append("\n")
+                accByItem[item.optString("id")]?.forEach { courier.append("  + ").append(it).append("\n") }
                 val notes = item.optString("notes")
-                if (notes.isNotBlank() && notes != "null") courier.append("  Obs: ").append(notes).append("\\n")
+                if (notes.isNotBlank() && notes != "null") courier.append("  Obs: ").append(notes).append("\n")
             }
         }
-        courier.append("\\n\\n")
+        courier.append("\n\n")
 
         val out = java.io.ByteArrayOutputStream()
         out.write(PrinterText.initialize())
