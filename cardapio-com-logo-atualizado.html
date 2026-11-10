@@ -368,7 +368,10 @@ $('checkout').onsubmit=async e=>{
    '🛵 *Entrega:* GRÁTIS',
    '💰 *TOTAL: '+money(data.total_cents)+'*',
    '',
-   '✅ Aguardando confirmação. Obrigado!'
+   '✅ Aguardando confirmação. Obrigado!',
+   '',
+   '🔗 *Peça novamente pelo nosso cardápio:*',
+   'https://cardapiosabordochef.com.br'
   ].filter(Boolean).join('\n');
   $('success-whatsapp').href='https://wa.me/5521984912563?text='+encodeURIComponent(whatsappMessage);
   cart.clear();drawCart();$('checkout').reset();$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);
