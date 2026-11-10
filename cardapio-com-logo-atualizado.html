@@ -95,7 +95,8 @@ body.success-screen #success-screen{display:block}
 .success-details div:last-child{border:0}
 .success-details span{color:#626875}
 .success-details strong{text-align:right}
-#success-whatsapp{display:block;width:100%;max-width:420px;margin:0 auto 12px;padding:15px 18px;border:0;border-radius:10px;background:#25D366;color:#fff;font-weight:800;font-size:16px;text-decoration:none;box-sizing:border-box;box-shadow:0 5px 14px #25D36635}\n #success-back{width:100%;max-width:360px;padding:13px 18px;border:0;border-radius:10px;background:var(--r);color:white;font-weight:750;font-size:15px}
+#success-whatsapp{display:block;width:100%;max-width:420px;margin:0 auto 12px;padding:15px 18px;border:0;border-radius:10px;background:#25D366;color:#fff;font-weight:800;font-size:16px;text-decoration:none;box-sizing:border-box;box-shadow:0 5px 14px #25D36635}
+ #success-back{width:100%;max-width:360px;padding:13px 18px;border:0;border-radius:10px;background:var(--r);color:white;font-weight:750;font-size:15px}
 @media(max-width:480px){#success-screen{margin:18px 13px;padding:25px 17px}.success-details{padding:12px}}
 
 /* Confirmação visual ao adicionar produtos ao carrinho */
@@ -343,8 +344,8 @@ $('checkout').onsubmit=async e=>{
   $('success-payment').textContent=paymentLabels[payment]||'Pagamento na entrega';
   const orderLines=[...cart.values()].map(({product,units})=>{
    const details=units.map((choices,index)=>choices.length?'  Quentinha '+(index+1)+': '+choices.join(', '):'').filter(Boolean);
-   return ['• '+units.length+'x '+product.name,'  Valor: '+money(product.price_cents*units.length),...details].join('\\n');
-  }).join('\\n');
+   return ['• '+units.length+'x '+product.name,'  Valor: '+money(product.price_cents*units.length),...details].join('\n');
+  }).join('\n');
   const orderDate=new Date().toLocaleString('pt-BR');
   const whatsappMessage=[
    'Olá! Acabei de realizar um pedido no Sabor do Chef.',
@@ -366,7 +367,7 @@ $('checkout').onsubmit=async e=>{
    'TOTAL: '+money(data.total_cents),
    '',
    'Aguardo a confirmação. Obrigado!'
-  ].filter(Boolean).join('\\n');
+  ].filter(Boolean).join('\n');
   $('success-whatsapp').href='https://wa.me/5521984912563?text='+encodeURIComponent(whatsappMessage);
   cart.clear();drawCart();$('checkout').reset();$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);
   document.body.classList.remove('order-screen');
