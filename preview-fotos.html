@@ -13,24 +13,25 @@ header{background:linear-gradient(120deg,#18090b,#421015 58%,#8e1720);color:#fff
 h1{font-size:23px;margin:0;font-weight:900}.sub{font-size:13px;opacity:.85;margin-top:4px}
 main{padding:22px 14px 50px}.notice{background:#fff8e9;border:1px solid #ead7a8;border-radius:13px;padding:13px 15px;font-size:13px;line-height:1.5;margin-bottom:20px}
 h2{font-size:20px;margin:0 0 6px}.intro{color:var(--muted);font-size:13px;margin:0 0 16px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:15px}
-.card{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 5px 18px #20263808}
-.photo{width:100%;height:180px;object-fit:cover;background:#eee;display:block}.body{padding:13px}.name{font-weight:800}.price{font-weight:850;color:var(--red);margin-top:4px}
+.grid{display:flex;flex-direction:column;gap:0;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.card{display:flex;align-items:flex-start;gap:14px;padding:13px;border-bottom:1px solid var(--line);background:#fff;min-width:0}
+.card:last-child{border-bottom:0}
+.photo{width:190px;height:145px;flex:0 0 190px;object-fit:cover;background:#eee;display:block;border-radius:12px}.body{padding:2px 0;min-width:0;flex:1}.name{font-weight:800;line-height:1.25}.price{font-weight:850;color:var(--red);margin-top:6px}
 .actions{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
 button{border:0;border-radius:9px;padding:10px 12px;background:var(--red);color:#fff;font:700 12px inherit;cursor:pointer}
 button:disabled{opacity:.5;cursor:wait}.status{font-size:12px;color:var(--muted);line-height:1.45;margin-top:9px;min-height:32px}
 .compare{display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.compare.show{display:grid}.compare figure{margin:0;min-width:0}.compare img{width:100%;height:105px;object-fit:cover;border-radius:8px;background:#eee}.compare figcaption{font-size:11px;color:var(--muted);margin-top:4px}
 .loading,.empty{padding:25px;text-align:center;color:var(--muted);background:white;border-radius:12px}
 footer{font-size:12px;color:var(--muted);text-align:center;margin:25px 0}
-@media(max-width:480px){header{padding:19px 14px}.head{gap:11px}h1{font-size:20px}.photo{height:170px}}
+@media(max-width:480px){header{padding:19px 14px}.head{gap:11px}h1{font-size:20px}.card{gap:11px;padding:11px}.photo{width:38%;height:auto;aspect-ratio:190/145;flex-basis:38%;}.name{font-size:14px}.price{font-size:14px}.actions button{padding:9px 10px}.status{font-size:11px}}
 </style>
 </head>
 <body>
 <header><div class="head"><div class="mark">S</div><div><h1>Sabor do Chef</h1><div class="sub">Prévia privada de otimização das fotos</div></div></div></header>
 <main>
 <div class="notice"><strong>Esta é uma demonstração, não o cardápio oficial.</strong><br>Você pode comparar a foto atual com uma versão WebP comprimida diretamente neste aparelho. Nada é enviado ao banco, nenhuma foto é substituída e não é possível fazer pedidos por esta página.</div>
-<h2>Comparação das imagens</h2>
-<p class="intro">Até 12 produtos com foto serão exibidos. O teste gera uma cópia WebP com até 480 px no lado maior (aproximadamente 480 × 360 px em fotos 4:3), adequada para miniaturas de celular em telas de alta densidade.</p>
+<h2>Prévia em lista compacta</h2>
+<p class="intro">Até 12 produtos com foto serão exibidos em uma lista compacta, com miniaturas à esquerda e informações à direita, inspirada na referência enviada. O teste gera uma cópia WebP com até 480 px no lado maior para comparar qualidade e peso.</p>
 <div id="products" class="loading">Carregando fotos para a prévia…</div>
 <footer>Ambiente de demonstração · Sabor do Chef</footer>
 </main>
