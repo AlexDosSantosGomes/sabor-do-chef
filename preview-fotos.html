@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#b5121b">
+<title>Prévia de fotos | Sabor do Chef</title>
+<style>
+:root{--red:#b5121b;--dark:#210b0d;--gold:#d5ad60;--ink:#25252a;--muted:#737782;--line:#e9e9ed}
+*{box-sizing:border-box}body{margin:0;background:#f5f5f7;color:var(--ink);font:15px Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:linear-gradient(120deg,#18090b,#421015 58%,#8e1720);color:#fff;padding:24px 16px;border-bottom:3px solid var(--gold)}
+.head,main{max-width:1050px;margin:auto}.head{display:flex;align-items:center;gap:14px}.mark{width:54px;height:54px;border-radius:14px;background:#fff;color:var(--red);display:grid;place-items:center;font-size:26px;font-weight:900}
+h1{font-size:23px;margin:0;font-weight:900}.sub{font-size:13px;opacity:.85;margin-top:4px}
+main{padding:22px 14px 50px}.notice{background:#fff8e9;border:1px solid #ead7a8;border-radius:13px;padding:13px 15px;font-size:13px;line-height:1.5;margin-bottom:20px}
+h2{font-size:20px;margin:0 0 6px}.intro{color:var(--muted);font-size:13px;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:15px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 5px 18px #20263808}
+.photo{width:100%;height:180px;object-fit:cover;background:#eee;display:block}.body{padding:13px}.name{font-weight:800}.price{font-weight:850;color:var(--red);margin-top:4px}
+.actions{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+button{border:0;border-radius:9px;padding:10px 12px;background:var(--red);color:#fff;font:700 12px inherit;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}.status{font-size:12px;color:var(--muted);line-height:1.45;margin-top:9px;min-height:32px}
+.compare{display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.compare.show{display:grid}.compare figure{margin:0;min-width:0}.compare img{width:100%;height:105px;object-fit:cover;border-radius:8px;background:#eee}.compare figcaption{font-size:11px;color:var(--muted);margin-top:4px}
+.loading,.empty{padding:25px;text-align:center;color:var(--muted);background:white;border-radius:12px}
+footer{font-size:12px;color:var(--muted);text-align:center;margin:25px 0}
+@media(max-width:480px){header{padding:19px 14px}.head{gap:11px}h1{font-size:20px}.photo{height:170px}}
+</style>
+</head>
+<body>
+<header><div class="head"><div class="mark">S</div><div><h1>Sabor do Chef</h1><div class="sub">Prévia privada de otimização das fotos</div></div></div></header>
+<main>
+<div class="notice"><strong>Esta é uma demonstração, não o cardápio oficial.</strong><br>Você pode comparar a foto atual com uma versão WebP comprimida diretamente neste aparelho. Nada é enviado ao banco, nenhuma foto é substituída e não é possível fazer pedidos por esta página.</div>
+<h2>Comparação das imagens</h2>
+<p class="intro">Até 12 produtos com foto serão exibidos. Toque em “Testar otimização” para gerar uma cópia local e comparar qualidade e tamanho.</p>
+<div id="products" class="loading">Carregando fotos para a prévia…</div>
+<footer>Ambiente de demonstração · Sabor do Chef</footer>
+</main>
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
+const root=document.getElementById('products');
+const fmt=n=>n<1024?(n+' bytes'):(n/1024).toFixed(0)+' KB';
+function optimize(img){
+ return new Promise((resolve,reject)=>{
+  const w=img.naturalWidth,h=img.naturalHeight;
+  if(!w||!h)return reject(new Error('Não foi possível ler esta imagem.'));
+  const scale=Math.min(1,1200/Math.max(w,h)),canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
+  const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  canvas.toBlob(blob=>blob?resolve({blob,width:canvas.width,height:canvas.height}):reject(new Error('Este aparelho não conseguiu gerar WebP.')),'image/webp',.78);
+ });
+}
+function card(p){
+ const el=document.createElement('article');el.className='card';
+ const img=document.createElement('img');img.className='photo';img.loading='lazy';img.alt=p.name||'Foto do produto';img.crossOrigin='anonymous';img.src=p.photo_url;
+ const body=document.createElement('div');body.className='body';
+ const name=document.createElement('div');name.className='name';name.textContent=p.name||'Produto';
+ const price=document.createElement('div');price.className='price';price.textContent=(p.price_cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+ const actions=document.createElement('div');actions.className='actions';
+ const btn=document.createElement('button');btn.textContent='Testar otimização';
+ const status=document.createElement('div');status.className='status';status.textContent='Foto original: carregando…';
+ const compare=document.createElement('div');compare.className='compare';
+ btn.addEventListener('click',async()=>{
+  btn.disabled=true;btn.textContent='Processando…';status.textContent='Gerando WebP neste aparelho…';
+  try{
+   if(!img.complete||!img.naturalWidth)await new Promise((res,rej)=>{img.onload=res;img.onerror=()=>rej(new Error('A foto não carregou.'))});
+   const result=await optimize(img),before=Number(img.dataset.bytes||0),after=result.blob.size;
+   const url=URL.createObjectURL(result.blob);
+   compare.innerHTML='';
+   const a=document.createElement('figure'),b=document.createElement('figure'),old=document.createElement('img'),fresh=document.createElement('img'),capA=document.createElement('figcaption'),capB=document.createElement('figcaption');
+   old.src=p.photo_url;old.alt='Foto atual';fresh.src=url;fresh.alt='Prévia WebP otimizada';
+   capA.textContent='Atual · '+img.naturalWidth+' × '+img.naturalHeight;
+   capB.textContent='WebP · '+result.width+' × '+result.height+' · '+fmt(after);
+   a.append(old,capA);b.append(fresh,capB);compare.append(a,b);compare.classList.add('show');
+   const reduction=before?Math.max(0,Math.round((1-after/before)*100)):null;
+   status.textContent='Arquivo WebP: '+fmt(after)+(before?' · redução aproximada de '+reduction+'%':'')+'. Cópia apenas local; nada foi enviado.';
+   btn.textContent='Otimização testada';
+  }catch(e){status.textContent=e.message||'Não foi possível otimizar esta foto.';btn.disabled=false;btn.textContent='Tentar novamente'}
+ });
+ img.addEventListener('load',async()=>{
+  try{const r=await fetch(p.photo_url,{mode:'cors'});const blob=await r.blob();img.dataset.bytes=blob.size;status.textContent='Foto atual: '+fmt(blob.size)+' · '+img.naturalWidth+' × '+img.naturalHeight}
+  catch{status.textContent='Foto atual carregada. O navegador não informou o tamanho original.'}
+ },{once:true});
+ img.addEventListener('error',()=>{status.textContent='Não foi possível carregar esta foto nesta prévia.'},{once:true});
+ actions.append(btn);body.append(name,price,actions,status,compare);el.append(img,body);return el;
+}
+try{
+ const {data,error}=await supabase.from('products').select('id,name,price_cents,photo_url,active,stock_quantity').eq('active',true).not('photo_url','is',null).order('name').limit(12);
+ if(error)throw error;
+ if(!data?.length){root.className='empty';root.textContent='Nenhuma foto disponível para demonstrar.'}
+ else{root.className='grid';data.forEach(p=>root.append(card(p)))}
+}catch(e){root.className='empty';root.textContent='Não foi possível carregar as fotos. '+(e.message||'Verifique a conexão e tente novamente.')}
+</script>
+</body></html>
