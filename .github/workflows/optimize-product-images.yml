@@ -1,0 +1,42 @@
+name: Preparar otimizacao de fotos (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preview = só gerar cópias e backup; apply = atualizar photo_url'
+        required: true
+        type: choice
+        options:
+          - preview
+          - apply
+        default: preview
+permissions:
+  contents: read
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependencias
+        run: npm install --no-save @supabase/supabase-js sharp
+      - name: Gerar WebP e backup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            node scripts/migrate-product-images.mjs --apply
+          else
+            node scripts/migrate-product-images.mjs
+          fi
+      - name: Disponibilizar backup para download
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sabor-do-chef-backup-fotos
+          path: image-migration-backup/
+          if-no-files-found: warn
+          retention-days: 90
