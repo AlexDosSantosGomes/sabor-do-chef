@@ -30,7 +30,7 @@ footer{font-size:12px;color:var(--muted);text-align:center;margin:25px 0}
 <main>
 <div class="notice"><strong>Esta é uma demonstração, não o cardápio oficial.</strong><br>Você pode comparar a foto atual com uma versão WebP comprimida diretamente neste aparelho. Nada é enviado ao banco, nenhuma foto é substituída e não é possível fazer pedidos por esta página.</div>
 <h2>Comparação das imagens</h2>
-<p class="intro">Até 12 produtos com foto serão exibidos. Toque em “Testar otimização” para gerar uma cópia local e comparar qualidade e tamanho.</p>
+<p class="intro">Até 12 produtos com foto serão exibidos. O teste gera uma cópia WebP com até 480 px no lado maior (aproximadamente 480 × 360 px em fotos 4:3), adequada para miniaturas de celular em telas de alta densidade.</p>
 <div id="products" class="loading">Carregando fotos para a prévia…</div>
 <footer>Ambiente de demonstração · Sabor do Chef</footer>
 </main>
@@ -43,7 +43,7 @@ function optimize(img){
  return new Promise((resolve,reject)=>{
   const w=img.naturalWidth,h=img.naturalHeight;
   if(!w||!h)return reject(new Error('Não foi possível ler esta imagem.'));
-  const scale=Math.min(1,1200/Math.max(w,h)),canvas=document.createElement('canvas');
+  const scale=Math.min(1,480/Math.max(w,h)),canvas=document.createElement('canvas');
   canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
   const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);
   canvas.toBlob(blob=>blob?resolve({blob,width:canvas.width,height:canvas.height}):reject(new Error('Este aparelho não conseguiu gerar WebP.')),'image/webp',.78);
