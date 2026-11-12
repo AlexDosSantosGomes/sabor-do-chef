@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - atualizacao/fila-impressao-ptbr-v0-2
+      - feature/entrega-retirada
     paths:
       - "app-impressao-android/**"
       - ".github/workflows/build-android-print-apk.yml"
