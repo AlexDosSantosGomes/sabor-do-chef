@@ -71,6 +71,8 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:#bd222b;box-sh
 .mobile{padding:12px 15px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -6px 22px #20263812;border-color:#ececf0}
 .mobile button{border-radius:12px}
 @media(max-width:760px){header{padding:17px 14px}.brand-logo{width:76px;height:76px;border-radius:16px}.brand{font-size:24px}main{padding:19px 13px 115px}.layout{grid-template-columns:1fr;gap:15px}.products{gap:12px}.photo,.placeholder{height:150px}.cart{padding:16px}.mobile{display:block}}
+
+.receive-options{display:grid;gap:10px;margin:12px 0 18px}.receive-option{display:flex;align-items:flex-start;gap:12px;margin:0;padding:15px;border:1.5px solid #e1e2e7;border-radius:13px;background:#fff;cursor:pointer}.receive-option:has(input:checked){border-color:#b5121b;background:#fff8f8;box-shadow:0 0 0 2px #b5121b12}.receive-option input{width:19px;height:19px;flex:none;margin:2px 0 0;accent-color:#b5121b}.receive-option span{display:grid;gap:3px}.receive-option strong{font-size:14px;color:#292c33}.receive-option small{font-size:12px;font-weight:500;color:#737782}
 @media(max-width:390px){.products{grid-template-columns:1fr}.photo,.placeholder{height:185px}}
 
 /* Navegação entre cardápio e revisão do pedido */
@@ -133,19 +135,28 @@ header>div{max-width:1080px}
 <div class="layout"><section><div id="products" class="products"><div class="loading">Carregando produtos…</div></div></section>
 <aside class="cart" id="cart"><button type="button" class="btn secondary" id="back-menu">← Voltar ao cardápio</button><h2>Seu pedido <span id="count">0</span></h2><div id="cart-items" class="small">Seu carrinho está vazio.</div>
 <div class="totals"><div class="line"><span>Produtos</span><b id="subtotal">R$ 0,00</b></div><div class="line"><span>Entrega</span><b class="free">Grátis</b></div><div class="line total"><span>Total</span><span id="total">R$ 0,00</span></div></div>
-<form id="checkout"><h2>Dados para entrega</h2>
+<form id="checkout">
+<h2>Como deseja receber seu pedido?</h2>
+<div class="receive-options" role="radiogroup" aria-label="Modalidade de recebimento">
+<label class="receive-option"><input type="radio" name="order-type" value="DELIVERY" required><span><strong>ENTREGA</strong><small>Receber no endereço informado. Entrega grátis.</small></span></label>
+<label class="receive-option"><input type="radio" name="order-type" value="PICKUP" required><span><strong>RETIRADA NO LOCAL</strong><small>Buscar o pedido diretamente na pensão. Sem taxa.</small></span></label>
+</div>
+<div id="customer-fields" class="hidden">
+<h2>Seus dados</h2>
 <label for="customer-name">Nome</label><input id="customer-name" maxlength="100" required autocomplete="name" placeholder="Seu nome">
 <label for="customer-phone">Telefone com DDD</label><input id="customer-phone" maxlength="25" required inputmode="tel" autocomplete="tel" placeholder="(21) 99999-9999">
-<label for="address">Endereço completo</label><textarea id="address" maxlength="300" required autocomplete="street-address" placeholder="Rua, número, complemento, bairro e referência"></textarea>
+<div id="delivery-address-field" class="hidden"><label for="address">Endereço completo</label><textarea id="address" maxlength="300" autocomplete="street-address" placeholder="Rua, número, complemento, bairro e referência"></textarea></div>
 <label for="customer-notes">Observações do pedido (opcional)</label><textarea id="customer-notes" maxlength="300" rows="3" placeholder="Ex.: Não colocar cebola, enviar talheres..."></textarea><div class="small">Se tiver algum pedido especial, escreva aqui. (Até 300 caracteres)</div>
 <label for="payment">Forma de pagamento</label><select id="payment"><option value="CASH">Dinheiro</option><option value="PIX">Pix na entrega</option><option value="CARD">Cartão na entrega</option></select>
 <div id="change-area"><label class="check"><input type="checkbox" id="needs-change"> Precisa de troco?</label><div id="change-value" class="hidden"><label for="change-for">Vai pagar com quanto? (R$)</label><input id="change-for" inputmode="decimal" placeholder="Ex.: 50,00"><div id="change-preview" class="small" aria-live="polite" style="margin-top:7px;font-weight:700"></div></div></div>
-<button class="btn submit" id="submit" type="submit">Confirmar pedido</button><div class="small">O pagamento será feito ao receber o pedido. Não há cobrança pelo site.</div><div id="message" class="message" role="status" aria-live="polite"></div>
+<button class="btn submit" id="submit" type="submit">Confirmar pedido</button><div class="small">O pagamento será feito no recebimento ou na retirada. Não há cobrança pelo site.</div>
+</div>
+<div id="message" class="message" role="status" aria-live="polite"></div>
 </form></aside></div></main>
 <section id="success-screen" aria-live="polite">
  <div class="success-mark" aria-hidden="true">✓</div>
  <h2>Pedido confirmado!</h2>
- <p class="success-sub">Recebemos seu pedido! Para avisar a loja e confirmar seu envio, toque no botão abaixo e envie a mensagem pelo WhatsApp.</p>
+ <p class="success-sub">Recebemos seu pedido! Para avisar a loja e confirmar seu pedido, toque no botão abaixo e envie a mensagem pelo WhatsApp.</p>
  <div class="success-details">
   <div><span>Número do pedido</span><strong id="success-order-number">—</strong></div>
   <div><span>Cliente</span><strong id="success-customer">—</strong></div>
@@ -314,18 +325,33 @@ $('go-cart').onclick=openOrderScreen;
 $('added-view-cart').onclick=()=>{if(addedFeedbackTimer)clearTimeout(addedFeedbackTimer);$('added-feedback').classList.remove('visible');openOrderScreen()};
 $('back-menu').onclick=closeOrderScreen;
 function cents(s){const n=Number(String(s).trim().replace(/\./g,'').replace(',','.'));return Number.isFinite(n)&&n>0?Math.round(n*100):null}
+function updateReceiveFields(){
+ const selected=document.querySelector('input[name="order-type"]:checked')?.value||'';
+ $('customer-fields').classList.toggle('hidden',!selected);
+ $('delivery-address-field').classList.toggle('hidden',selected!=='DELIVERY');
+ $('address').required=selected==='DELIVERY';
+ const payment=$('payment');
+ payment.options[1].text=selected==='PICKUP'?'Pix na retirada':'Pix na entrega';
+ payment.options[2].text=selected==='PICKUP'?'Cartão na retirada':'Cartão na entrega';
+ $('submit').textContent=selected==='PICKUP'?'Confirmar retirada':'Confirmar pedido';
+}
+document.querySelectorAll('input[name="order-type"]').forEach(input=>input.addEventListener('change',updateReceiveFields));
+updateReceiveFields();
 $('checkout').onsubmit=async e=>{
  e.preventDefault();$('message').className='message';
  if(!await refreshStoreStatus()){message('A loja está fechada no momento. Não estamos recebendo novos pedidos.');return}
  if(!cart.size){message('Adicione produtos ao carrinho.');return}
+ const orderType=document.querySelector('input[name="order-type"]:checked')?.value;
+ if(!orderType){message('Escolha ENTREGA ou RETIRADA NO LOCAL.');return}
  const payment=$('payment').value,needs=payment==='CASH'&&$('needs-change').checked,change=needs?cents($('change-for').value):null;
  if(needs&&!change){message('Informe um valor válido para o troco.');return}
  const orderTotal=[...cart.values()].reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0);
  if(needs&&change<=orderTotal){message('O valor informado para troco precisa ser maior que o total do pedido ('+money(orderTotal)+').');return}
  const payload={
+  order_type:orderType,
   push_subscription:pushSubscription?pushSubscription.toJSON():null,
   customer_name:$('customer-name').value.trim(),customer_phone:$('customer-phone').value.trim(),
-  delivery_address:$('address').value.trim(),customer_notes:$('customer-notes').value.trim(),payment_method:payment,needs_change:needs,
+  delivery_address:orderType==='DELIVERY' ? $('address').value.trim() : '',customer_notes:$('customer-notes').value.trim(),payment_method:payment,needs_change:needs,
   change_for_cents:change,items:[...cart.entries()].map(([id,x])=>({product_id:id,quantity:x.units.length,accompaniments_by_unit:isQuentinhaProduct(x.product)?x.units:x.units.map(()=>[])}))
  };
  const button=$('submit');button.disabled=true;button.textContent='Enviando pedido…';
@@ -333,11 +359,11 @@ $('checkout').onsubmit=async e=>{
   const {data,error}=await supabase.functions.invoke('create-delivery-order',{body:payload});
   if(error){let detail=error.message||'Falha ao enviar pedido.';try{const response=error.context;if(response&&typeof response.clone==='function'){const body=await response.clone().json();if(body?.error)detail=body.error}}catch{}throw new Error(detail)}
   if(!data?.success)throw new Error(data?.error||'Não foi possível confirmar o pedido.');
-  const paymentLabels={CASH:'Dinheiro na entrega',PIX:'Pix na entrega',CARD:'Cartão na entrega'};
+  const paymentLabels={CASH:orderType==='PICKUP'?'Dinheiro na retirada':'Dinheiro na entrega',PIX:orderType==='PICKUP'?'Pix na retirada':'Pix na entrega',CARD:orderType==='PICKUP'?'Cartão na retirada':'Cartão na entrega'};
   $('success-order-number').textContent=data.order_number||'Confirmado';
   $('success-customer').textContent=payload.customer_name;
   $('success-total').textContent=money(data.total_cents);
-  $('success-payment').textContent=paymentLabels[payment]||'Pagamento na entrega';
+  $('success-payment').textContent=paymentLabels[payment]||'Pagamento no recebimento';
   const orderLines=[...cart.values()].map(({product,units})=>{
    const accompaniments=units.map(choices=>choices.length?' 🍟 Acompanhamentos: '+choices.join(', '):'').filter(Boolean);
    return ['- '+units.length+'x '+product.name+' - *'+money(product.price_cents*units.length)+'*',...accompaniments].join('\n');
@@ -349,10 +375,11 @@ $('checkout').onsubmit=async e=>{
    '',
    '🧾 *Pedido Nº:* #'+(data.order_number||'Confirmado'),
    '📅 *Data:* '+orderDate,
+   '📦 *Modalidade:* '+(orderType==='PICKUP'?'RETIRADA NO LOCAL':'ENTREGA'),
    '',
    '👤 *Nome:* '+payload.customer_name,
    '📞 *Telefone:* '+payload.customer_phone,
-   '📍 *Endereço:* '+payload.delivery_address,
+   orderType==='DELIVERY'?'📍 *Endereço:* '+payload.delivery_address:'',
    '',
    '---',
    '',
@@ -362,10 +389,10 @@ $('checkout').onsubmit=async e=>{
    '',
    '---',
    '',
-   '💵 *Pagamento:* '+(paymentLabels[payment]||'Pagamento na entrega'),
+   '💵 *Pagamento:* '+(paymentLabels[payment]||'Pagamento no recebimento'),
    needs?'💸 *Vai pagar com:* '+money(change):'',
    needs?'💰 *Troco:* '+money(change-orderTotal):'',
-   '🛵 *Entrega:* GRÁTIS',
+   orderType==='DELIVERY'?'🛵 *Entrega:* GRÁTIS':'📦 *Retirada no local:* SEM TAXA',
    '💰 *TOTAL: '+money(data.total_cents)+'*',
    '',
    '✅ Aguardando confirmação. Obrigado!',
@@ -374,7 +401,7 @@ $('checkout').onsubmit=async e=>{
    'https://cardapiosabordochef.com.br'
   ].filter(Boolean).join('\n');
   $('success-whatsapp').href='https://wa.me/5521984912563?text='+encodeURIComponent(whatsappMessage);
-  cart.clear();drawCart();$('checkout').reset();$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);
+  cart.clear();drawCart();$('checkout').reset();$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);updateReceiveFields();
   document.body.classList.remove('order-screen');
   document.body.classList.add('success-screen');
   window.scrollTo({top:0,behavior:'smooth'});
