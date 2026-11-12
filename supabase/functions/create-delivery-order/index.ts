@@ -53,13 +53,17 @@ Deno.serve(async (req: Request) => {
   const customerPhone = typeof body.customer_phone === "string" ? body.customer_phone.trim() : "";
   const customerNotes = typeof body.customer_notes === "string" ? body.customer_notes.trim() : "";
   const deliveryAddress = typeof body.delivery_address === "string" ? body.delivery_address.trim() : "";
-  const orderType = body.order_type === "PICKUP" ? "PICKUP" : "DELIVERY";
+  const orderType = body.order_type === undefined ? "DELIVERY" : String(body.order_type);
   const paymentMethod = body.payment_method;
   const needsChange = body.needs_change === true;
   const changeForCents = body.change_for_cents === null || body.change_for_cents === undefined
     ? null
     : Number(body.change_for_cents);
   const items = body.items;
+
+  if (!["DELIVERY", "PICKUP"].includes(orderType)) {
+    return jsonResponse({ error: "Escolha ENTREGA ou RETIRADA NO LOCAL." }, 400, origin);
+  }
 
   if (
     customerName.length < 2 || customerName.length > 100 ||
