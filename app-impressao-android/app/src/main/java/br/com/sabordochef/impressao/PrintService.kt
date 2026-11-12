@@ -15,6 +15,9 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.NumberFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -209,6 +212,10 @@ class PrintService : Service() {
             }
         }
 
+        if (order.optString("order_type").equals("PICKUP", ignoreCase = true)) {
+            return buildPickupTickets(order, items, accByItem)
+        }
+
         val number = order.optString("order_number", "N/I")
         // A data/hora vem do registro original do pedido, nunca do momento da impressão.
         val orderDateTime = formatOrderDateTime(
@@ -296,6 +303,82 @@ class PrintService : Service() {
         out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
         out.write(PrinterText.encode(motoboy.toString()))
         out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
+        return out.toByteArray()
+    }
+
+    private fun buildPickupTickets(
+        order: JSONObject,
+        items: org.json.JSONArray?,
+        accByItem: Map<String, List<String>>
+    ): ByteArray {
+        val number = order.optString("order_number", "N/I")
+        val createdAt = order.optString("created_at", order.optString("createdAt", ""))
+        val createdInstant = try { Instant.parse(createdAt) } catch (_: Exception) { null }
+        val localDate = createdInstant?.atZone(ZoneId.of("America/Sao_Paulo"))
+        val date = localDate?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale("pt", "BR"))) ?: "N/I"
+        val time = localDate?.format(DateTimeFormatter.ofPattern("HH:mm", Locale("pt", "BR"))) ?: "N/I"
+        val totalCents = order.optLong("total_cents", 0L)
+        val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
+            "CASH" -> "DINHEIRO"
+            "PIX" -> "PIX"
+            "CARD" -> "CARTÃO"
+            else -> order.optString("payment_method", "Não informado").uppercase(Locale("pt", "BR"))
+        }
+
+        val ticket = StringBuilder()
+            .append("SABOR DO CHEF\\n")
+            .append("COMANDA DE PEDIDO\\n")
+            .append("================================\\n")
+            .append("              RETIRADA\\n")
+            .append("================================\\n")
+            .append("PEDIDO Nº ").append(number).append("\\n")
+            .append("Data: ").append(date).append("\\n")
+            .append("Horário do pedido: ").append(time).append("\\n")
+            .append("Cliente: ").append(order.optString("customer_name", "Não informado")).append("\\n")
+            .append("Telefone: ").append(order.optString("customer_phone", "Não informado")).append("\\n")
+            .append("--------------------------------\\n")
+            .append("PRODUTOS\\n")
+
+        if (items != null) {
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                ticket.append(item.optInt("quantity", 1)).append("x ")
+                    .append(item.optString("product_name_snapshot")).append("\\n")
+                accByItem[item.optString("id")]?.forEach { ticket.append("  + ").append(it).append("\\n") }
+                val notes = item.optString("notes")
+                if (notes.isNotBlank() && notes != "null") ticket.append("  Obs: ").append(notes).append("\\n")
+            }
+        }
+
+        val customerNotes = order.optString("customer_notes")
+        if (customerNotes.isNotBlank() && customerNotes != "null") {
+            ticket.append("--------------------------------\\nOBS: ").append(customerNotes).append("\\n")
+        }
+
+        if (order.optBoolean("needs_change")) {
+            val changeFor = order.optLong("change_for_cents", 0L)
+            val changeDue = changeFor - totalCents
+            ticket.append("--------------------------------\\n")
+                .append("Vai pagar com: ").append(formatCurrencyCents(changeFor)).append("\\n")
+                .append("Troco: ").append(formatCurrencyCents(changeDue)).append("\\n")
+        }
+
+        ticket.append("--------------------------------\\n")
+            .append("TOTAL: ").append(formatCurrencyCents(totalCents)).append("\\n")
+            .append("FORMA DE PAGAMENTO: ").append(payment).append("\\n")
+            .append("PAGAMENTO NA RETIRADA\\n")
+            .append("--------------------------------\\n")
+            .append("              RETIRADA\\n")
+            .append("\\n\\n")
+
+        val copy = PrinterText.encode(ticket.toString())
+        val cut = byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
+        val out = java.io.ByteArrayOutputStream()
+        out.write(PrinterText.initialize())
+        out.write(copy)
+        out.write(cut)
+        out.write(copy)
+        out.write(cut)
         return out.toByteArray()
     }
 
