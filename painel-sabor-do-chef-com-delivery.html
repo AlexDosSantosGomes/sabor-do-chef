@@ -1097,8 +1097,7 @@ async function loadDeliveryOrders() {
 
   const { data, error } = await supabase
     .from('orders')
-    .select('id, order_number, status, customer_name, customer_phone, delivery_address, customer_notes, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes, order_item_accompaniments(accompaniment_name, unit_index))')
-    .eq('order_type', 'DELIVERY')
+    .select('id, order_number, order_type, status, customer_name, customer_phone, delivery_address, customer_notes, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes, order_item_accompaniments(accompaniment_name, unit_index))')
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -1136,6 +1135,9 @@ async function loadDeliveryOrders() {
     const change = order.needs_change
       ? `<div><strong>Cliente paga com:</strong> ${money(changeAmount)}</div><div><strong>Troco a devolver:</strong> ${money(changeDue)}</div>`
       : '';
+    const isPickup = order.order_type === 'PICKUP';
+    const modalityLabel = isPickup ? 'RETIRADA NO LOCAL' : 'ENTREGA';
+    if (order.status === 'ENTREGUE' && isPickup) statusNames.ENTREGUE = 'Pedido retirado';
     const isPending = ['RECEBIDO', 'AGUARDANDO_APROVACAO'].includes(order.status);
     const rejection = order.status === 'CANCELADO' && order.cancellation_reason
       ? `<div class="message error"><strong>Motivo da recusa:</strong> ${escapeHTML(order.cancellation_reason)}</div>`
@@ -1148,7 +1150,7 @@ async function loadDeliveryOrders() {
           <button class="primary" type="button" data-order-accept="${order.id}">Aceitar pedido</button>
           <button class="danger" type="button" data-order-reject="${order.id}">Cancelar pedido</button>
         ` : ''}
-        ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">Marcar como entregue</button>` : ''}
+        ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">${isPickup ? 'Marcar como retirado' : 'Marcar como entregue'}</button>` : ''}
         ${canPrint ? `<button class="primary" type="button" data-order-print-both="${order.id}">Imprimir as duas vias</button>` : ''}
         
       </div>`;
@@ -1161,14 +1163,15 @@ async function loadDeliveryOrders() {
         </div>
         ${isNewOrder ? '<div class="new-order-label">Novo pedido · precisa de aprovação</div>' : ''}
         <div class="order-meta">${date}</div>
+        <div><strong>Modalidade:</strong> ${modalityLabel}</div>
         <div><strong>Cliente:</strong> ${escapeHTML(order.customer_name)}</div>
         <div><strong>Telefone:</strong> ${escapeHTML(order.customer_phone)}</div>
-        <div><strong>Endereço:</strong> ${escapeHTML(order.delivery_address)}</div>
+        ${!isPickup ? `<div><strong>Endereço:</strong> ${escapeHTML(order.delivery_address || 'Não informado')}</div>` : ''}
         ${order.customer_notes ? `<div><strong>Observação do pedido:</strong> ${escapeHTML(order.customer_notes)}</div>` : ''}
         <div><strong>Pagamento:</strong> ${escapeHTML(paymentNames[order.payment_method] || order.payment_method || 'Não informado')}</div>
         ${change}
         <ul class="order-items">${items}</ul>
-        <div class="order-total">Total: ${money(order.total_cents)} · Entrega grátis</div>
+        <div class="order-total">Total: ${money(order.total_cents)} · ${isPickup ? 'Retirada sem taxa' : 'Entrega grátis'}</div>
         ${rejection}
         ${actions}
       </article>`;
@@ -1201,6 +1204,65 @@ async function loadDeliveryOrders() {
 }
 
 function printDeliveryTickets(order, ticketType = 'both') {
+  if (order.order_type === 'PICKUP') {
+    const items = order.order_items || [];
+    const created = new Date(order.created_at);
+    const date = created.toLocaleDateString('pt-BR');
+    const time = created.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const productLines = items.map(item => Math.max(1, Number(item.quantity) || 1) + 'x ' + item.product_name_snapshot);
+    const paymentNames = { CASH: 'DINHEIRO', PIX: 'PIX', CARD: 'CARTÃO' };
+    const ticketText = [
+      'SABOR DO CHEF',
+      'COMANDA DE PEDIDO',
+      '================================',
+      'RETIRADA',
+      '================================',
+      'PEDIDO Nº ' + order.order_number,
+      'Data: ' + date,
+      'Horário do pedido: ' + time,
+      'Cliente: ' + (order.customer_name || 'Não informado'),
+      'Telefone: ' + (order.customer_phone || 'Não informado'),
+      '--------------------------------',
+      'PRODUTOS',
+      ...productLines,
+      ...(order.needs_change ? ['Vai pagar com: ' + money(order.change_for_cents), 'Troco: ' + money(Number(order.change_for_cents) - Number(order.total_cents))] : []),
+      '--------------------------------',
+      'TOTAL ' + money(order.total_cents),
+      'FORMA DE PAGAMENTO: ' + (paymentNames[order.payment_method] || order.payment_method || 'Não informado'),
+      'PAGAMENTO NA RETIRADA',
+      '',
+      ''
+    ].join('\n');
+    if (/Android/i.test(navigator.userAgent)) {
+      const encoder = new TextEncoder();
+      const copy = encoder.encode(ticketText);
+      const cut = new Uint8Array([0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00]);
+      const bytes = new Uint8Array(copy.length * 2 + cut.length * 2);
+      let offset = 0;
+      bytes.set(copy, offset); offset += copy.length;
+      bytes.set(cut, offset); offset += cut.length;
+      bytes.set(copy, offset); offset += copy.length;
+      bytes.set(cut, offset);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 0x8000, bytes.length)));
+      const link = document.createElement('a');
+      link.href = 'intent:base64,' + btoa(binary) + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
+      link.style.display = 'none'; document.body.appendChild(link); link.click(); link.remove();
+      return;
+    }
+    const ticketHtml = '<section class="ticket"><h1>SABOR DO CHEF</h1><h2>COMANDA DE PEDIDO</h2><div class="order-number">RETIRADA</div>' +
+      '<div class="order-number">PEDIDO Nº ' + escapeHTML(order.order_number) + '</div>' +
+      '<p>Data: ' + escapeHTML(date) + '<br>Horário do pedido: ' + escapeHTML(time) + '</p>' +
+      '<p><strong>Cliente:</strong> ' + escapeHTML(order.customer_name || 'Não informado') + '<br><strong>Telefone:</strong> ' + escapeHTML(order.customer_phone || 'Não informado') + '</p><hr><h3>PRODUTOS</h3>' +
+      items.map(item => '<div class="item">' + Math.max(1, Number(item.quantity) || 1) + 'x ' + escapeHTML(item.product_name_snapshot) + '</div>').join('') +
+      (order.needs_change ? '<p>Vai pagar com: ' + money(order.change_for_cents) + '<br>Troco: ' + money(Number(order.change_for_cents) - Number(order.total_cents)) + '</p>' : '') +
+      '<hr><div class="total">TOTAL ' + money(order.total_cents) + '</div><div class="footer">PAGAMENTO NA RETIRADA</div></section>';
+    const printWindow = window.open('', '_blank', 'width=420,height=720');
+    if (!printWindow) { alert('O navegador bloqueou a janela de impressão. Permita pop-ups para este site e tente novamente.'); return; }
+    const html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Retirada #' + escapeHTML(order.order_number) + '</title><style>@page{size:80mm auto;margin:3mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;width:74mm;margin:0 auto;font-size:12px;line-height:1.35}.ticket{padding:2mm 0 4mm;break-after:page;page-break-after:always}.ticket:last-child{break-after:auto;page-break-after:auto}h1,h2{text-align:center;margin:2px 0 5px}h1{font-size:17px}h2{font-size:14px}.order-number{text-align:center;font-size:17px;font-weight:bold;margin:5px 0}p{margin:5px 0;overflow-wrap:anywhere}hr{border:0;border-top:1px dashed #555;margin:8px 0}.item{padding:4px 0;border-bottom:1px dashed #aaa}.total{text-align:center;font-size:18px;font-weight:bold;margin:8px 0}.footer{text-align:center;font-weight:bold;margin-top:8px}@media screen{body{padding:12px}.ticket{margin-bottom:18px;border-bottom:2px dashed #777}}</style></head><body>' + ticketHtml + ticketHtml + '</body></html>';
+    printWindow.document.open(); printWindow.document.write(html); printWindow.document.close(); printWindow.focus(); printWindow.print();
+    return;
+  }
   // No Android, envia texto diretamente ao RawBT. Em computadores, mantém a impressão do navegador.
   if (/Android/i.test(navigator.userAgent)) {
     const width = 48; // largura aproximada em caracteres para papel térmico de 80 mm
