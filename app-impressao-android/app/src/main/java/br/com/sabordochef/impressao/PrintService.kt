@@ -326,50 +326,50 @@ class PrintService : Service() {
         }
 
         val ticket = StringBuilder()
-            .append("SABOR DO CHEF\\n")
-            .append("COMANDA DE PEDIDO\\n")
-            .append("================================\\n")
-            .append("              RETIRADA\\n")
-            .append("================================\\n")
-            .append("PEDIDO Nº ").append(number).append("\\n")
-            .append("Data: ").append(date).append("\\n")
-            .append("Horário do pedido: ").append(time).append("\\n")
-            .append("Cliente: ").append(order.optString("customer_name", "Não informado")).append("\\n")
-            .append("Telefone: ").append(order.optString("customer_phone", "Não informado")).append("\\n")
-            .append("--------------------------------\\n")
-            .append("PRODUTOS\\n")
+            .append("SABOR DO CHEF\n")
+            .append("COMANDA DE PEDIDO\n")
+            .append("================================\n")
+            .append("              RETIRADA\n")
+            .append("================================\n")
+            .append("PEDIDO Nº ").append(number).append("\n")
+            .append("Data: ").append(date).append("\n")
+            .append("Horário do pedido: ").append(time).append("\n")
+            .append("Cliente: ").append(order.optString("customer_name", "Não informado")).append("\n")
+            .append("Telefone: ").append(order.optString("customer_phone", "Não informado")).append("\n")
+            .append("--------------------------------\n")
+            .append("PRODUTOS\n")
 
         if (items != null) {
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
                 ticket.append(item.optInt("quantity", 1)).append("x ")
-                    .append(item.optString("product_name_snapshot")).append("\\n")
-                accByItem[item.optString("id")]?.forEach { ticket.append("  + ").append(it).append("\\n") }
+                    .append(item.optString("product_name_snapshot")).append("\n")
+                accByItem[item.optString("id")]?.forEach { ticket.append("  + ").append(it).append("\n") }
                 val notes = item.optString("notes")
-                if (notes.isNotBlank() && notes != "null") ticket.append("  Obs: ").append(notes).append("\\n")
+                if (notes.isNotBlank() && notes != "null") ticket.append("  Obs: ").append(notes).append("\n")
             }
         }
 
         val customerNotes = order.optString("customer_notes")
         if (customerNotes.isNotBlank() && customerNotes != "null") {
-            ticket.append("--------------------------------\\nOBS: ").append(customerNotes).append("\\n")
+            ticket.append("--------------------------------\nOBS: ").append(customerNotes).append("\n")
         }
 
         if (order.optBoolean("needs_change")) {
             val changeFor = order.optLong("change_for_cents", 0L)
             val changeDue = changeFor - totalCents
-            ticket.append("--------------------------------\\n")
-                .append("Vai pagar com: ").append(formatCurrencyCents(changeFor)).append("\\n")
-                .append("Troco: ").append(formatCurrencyCents(changeDue)).append("\\n")
+            ticket.append("--------------------------------\n")
+                .append("Vai pagar com: ").append(formatCurrencyCents(changeFor)).append("\n")
+                .append("Troco: ").append(formatCurrencyCents(changeDue)).append("\n")
         }
 
-        ticket.append("--------------------------------\\n")
-            .append("TOTAL: ").append(formatCurrencyCents(totalCents)).append("\\n")
-            .append("FORMA DE PAGAMENTO: ").append(payment).append("\\n")
-            .append("PAGAMENTO NA RETIRADA\\n")
-            .append("--------------------------------\\n")
-            .append("              RETIRADA\\n")
-            .append("\\n\\n")
+        ticket.append("--------------------------------\n")
+            .append("TOTAL: ").append(formatCurrencyCents(totalCents)).append("\n")
+            .append("FORMA DE PAGAMENTO: ").append(payment).append("\n")
+            .append("PAGAMENTO NA RETIRADA\n")
+            .append("--------------------------------\n")
+            .append("              RETIRADA\n")
+            .append("\n\n")
 
         val copy = PrinterText.encode(ticket.toString())
         val cut = byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
