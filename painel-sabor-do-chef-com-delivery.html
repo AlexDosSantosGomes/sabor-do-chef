@@ -416,7 +416,7 @@ button:active{transform:translateY(1px)}
       <div id="storeControlMessage" class="message" aria-live="polite"></div>
     </div>
     <div class="toolbar" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
-      <h2 style="margin:0">Pedidos de delivery</h2>
+      <h2 style="margin:0">Pedidos</h2>
       <button class="secondary" id="refreshOrdersBtn" type="button">Atualizar pedidos</button>
     </div>
     <p class="muted">Pedidos novos ficam destacados. A lista é organizada por situação.</p>
@@ -1109,7 +1109,7 @@ async function loadDeliveryOrders() {
   deliveryOrdersCache = new Map((data || []).map(order => [order.id, order]));
 
   if (!data || data.length === 0) {
-    list.textContent = 'Ainda não há pedidos de delivery.';
+    list.textContent = 'Ainda não há pedidos.';
     return;
   }
 
@@ -1137,7 +1137,6 @@ async function loadDeliveryOrders() {
       : '';
     const isPickup = order.order_type === 'PICKUP';
     const modalityLabel = isPickup ? 'RETIRADA NO LOCAL' : 'ENTREGA';
-    if (order.status === 'ENTREGUE' && isPickup) statusNames.ENTREGUE = 'Pedido retirado';
     const isPending = ['RECEBIDO', 'AGUARDANDO_APROVACAO'].includes(order.status);
     const rejection = order.status === 'CANCELADO' && order.cancellation_reason
       ? `<div class="message error"><strong>Motivo da recusa:</strong> ${escapeHTML(order.cancellation_reason)}</div>`
@@ -1159,7 +1158,7 @@ async function loadDeliveryOrders() {
       <article class="order-card ${isNewOrder ? 'new-order' : ''}">
         <div class="order-head">
           <strong>Pedido #${escapeHTML(order.order_number)}</strong>
-          <span class="order-status">${escapeHTML(statusNames[order.status] || order.status)}</span>
+          <span class="order-status">${escapeHTML(isPickup && order.status === 'ENTREGUE' ? 'Pedido retirado' : (statusNames[order.status] || order.status))}</span>
         </div>
         ${isNewOrder ? '<div class="new-order-label">Novo pedido · precisa de aprovação</div>' : ''}
         <div class="order-meta">${date}</div>
@@ -1168,7 +1167,7 @@ async function loadDeliveryOrders() {
         <div><strong>Telefone:</strong> ${escapeHTML(order.customer_phone)}</div>
         ${!isPickup ? `<div><strong>Endereço:</strong> ${escapeHTML(order.delivery_address || 'Não informado')}</div>` : ''}
         ${order.customer_notes ? `<div><strong>Observação do pedido:</strong> ${escapeHTML(order.customer_notes)}</div>` : ''}
-        <div><strong>Pagamento:</strong> ${escapeHTML(paymentNames[order.payment_method] || order.payment_method || 'Não informado')}</div>
+        <div><strong>Pagamento:</strong> ${escapeHTML(isPickup ? ({ CASH: 'Dinheiro na retirada', PIX: 'Pix na retirada', CARD: 'Cartão na retirada' }[order.payment_method] || order.payment_method || 'Não informado') : (paymentNames[order.payment_method] || order.payment_method || 'Não informado'))}</div>
         ${change}
         <ul class="order-items">${items}</ul>
         <div class="order-total">Total: ${money(order.total_cents)} · ${isPickup ? 'Retirada sem taxa' : 'Entrega grátis'}</div>
