@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return reply({ error: "Método não permitido" }, 405);
 
-  let body: { action?: string; job_id?: string; error?: string; name?: string } = {};
+  let body: { action?: string; job_id?: string; order_id?: string; error?: string; name?: string } = {};
   try { body = await req.json(); } catch { return reply({ error: "JSON inválido" }, 400); }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -43,6 +43,29 @@ Deno.serve(async (req: Request) => {
     const { data: profile, error: profileError } = await db.from("admin_profiles")
       .select("is_active").eq("user_id", authData.user.id).maybeSingle();
     if (profileError || profile?.is_active !== true) return reply({ error: "Acesso restrito ao administrador ativo." }, 403);
+
+    if (body.action === "admin_reprint") {
+      if (!body.order_id) return reply({ error: "Pedido não informado para reimpressão." }, 400);
+      const { data: order, error: orderError } = await db.from("orders")
+        .select("id, order_type, status")
+        .eq("id", body.order_id).maybeSingle();
+      if (orderError || !order) return reply({ error: "Pedido não encontrado." }, 404);
+      if (!["DELIVERY", "PICKUP"].includes(order.order_type) || order.status === "CANCELADO") {
+        return reply({ error: "Este pedido não pode ser reimpresso." }, 409);
+      }
+      const { error: queueError } = await db.from("print_jobs").upsert({
+        order_id: order.id,
+        status: "PENDENTE",
+        attempt_count: 0,
+        last_error: null,
+        printed_at: null,
+        claimed_at: null,
+        device_id: null,
+        next_attempt_at: new Date().toISOString()
+      }, { onConflict: "order_id" });
+      if (queueError) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+      return reply({ ok: true, queued: true });
+    }
 
     if (body.action === "admin_pair") {
       const token = randomToken();
