@@ -1117,7 +1117,7 @@ async function loadDeliveryOrders() {
   const statusNames = {
     RECEBIDO: 'Pendente de aprovação',
     AGUARDANDO_APROVACAO: 'Pendente de aprovação',
-    APROVADO: 'Pedido aceito',
+    APROVADO: 'Aceito',
     ENVIADO_IMPRESSAO: 'Aceito',
     IMPRESSO: 'Impresso',
     FALHA_IMPRESSAO: 'Aceito',
@@ -1319,6 +1319,7 @@ function printDeliveryTickets(order, ticketType = 'both') {
       'CLIENTE: ' + (order.customer_name || 'Nao informado'),
       'TELEFONE: ' + (order.customer_phone || 'Nao informado'),
       'ENDERECO:', ...wrap(order.delivery_address || 'Nao informado'),
+      'OBSERVACAO DO CLIENTE:', ...wrap(order.customer_notes || 'Nenhuma'),
       divider, 'ITENS:', ...courierLines, divider,
       'PAGAMENTO: ' + (paymentNames[order.payment_method] || order.payment_method || 'Nao informado'),
       ...(order.needs_change ? ['CLIENTE PAGA COM: ' + money(order.change_for_cents),
@@ -1395,7 +1396,8 @@ function printDeliveryTickets(order, ticketType = 'both') {
     '<div class="muted">' + escapeHTML(date) + '</div><hr>' +
     '<h3>CLIENTE</h3><p class="customer">' + escapeHTML(order.customer_name || 'Não informado') + '</p>' +
     '<p><strong>Telefone:</strong><br>' + escapeHTML(order.customer_phone || 'Não informado') + '</p>' +
-    '<p><strong>Endereço:</strong><br>' + escapeHTML(order.delivery_address || 'Não informado') + '</p><hr>' +
+    '<p><strong>Endereço:</strong><br>' + escapeHTML(order.delivery_address || 'Não informado') + '</p>' +
+    '<p><strong>Observação do cliente:</strong><br>' + escapeHTML(order.customer_notes || 'Nenhuma') + '</p><hr>' +
     '<h3>ITENS</h3>' + (courierItems || '<p>Itens não informados</p>') + '<hr>' +
     '<h3>PAGAMENTO</h3><p>' + escapeHTML(paymentNames[order.payment_method] || order.payment_method || 'Não informado') + '</p>' +
     (order.needs_change ? '<p><strong>Cliente paga com:</strong> ' + money(tendered) + '<br><strong>TROCO A DEVOLVER:</strong> ' + money(changeDue) + '</p>' : '') +
