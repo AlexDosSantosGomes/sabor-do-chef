@@ -253,9 +253,41 @@ function drawProducts(){
  const createCard=p=>{const card=document.createElement('article');card.className='product';if(p.photo_url){const img=document.createElement('img');img.className='photo';img.src=p.photo_url;img.alt=p.name;img.loading='lazy';img.onerror=()=>{const x=document.createElement('div');x.className='placeholder';x.textContent='Sabor do Chef';img.replaceWith(x)};card.append(img)}else{const x=document.createElement('div');x.className='placeholder';x.textContent='Sabor do Chef';card.append(x)}const body=document.createElement('div');body.className='pbody';const n=document.createElement('div');n.className='name';n.textContent=p.name;const d=document.createElement('div');d.className='desc';d.textContent=p.description||'';const bottom=document.createElement('div');bottom.className='pbottom';const price=document.createElement('span');price.className='price';price.textContent=money(p.price_cents);const add=document.createElement('button');add.className='btn';add.textContent='Adicionar';add.onclick=()=>addItem(p.id);bottom.append(price,add);body.append(n,d,bottom);card.append(body);return card};
  if(!products.length){root.innerHTML='<div class="loading">Nenhum produto disponível no momento.</div>';return}
  ordered.forEach(c=>{const section=document.createElement('section');section.className='menu-category-section';section.id='menu-category-'+c.id;const heading=document.createElement('h3');heading.textContent=labels[categoryKey(c.name)]||c.name;section.append(heading);const grid=document.createElement('div');grid.className='products';const list=products.filter(p=>p.category_id===c.id).sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'pt-BR'));if(list.length)list.forEach(p=>grid.append(createCard(p)));else{const empty=document.createElement('p');empty.className='loading';empty.textContent='Nenhum produto disponível nesta categoria.';grid.append(empty)}section.append(grid);root.append(section)});
- if(window.menuCategoryObserver)window.menuCategoryObserver.disconnect();
- const observer=new IntersectionObserver(entries=>{if(window.scrollY<180){category='all';drawCategories();return}const visible=entries.filter(entry=>entry.isIntersecting).sort((x,y)=>y.intersectionRatio-x.intersectionRatio)[0];if(!visible)return;category=visible.target.id.replace('menu-category-','');drawCategories()},{root:null,rootMargin:'-125px 0px -58% 0px',threshold:[0,.1,.25,.5]});
- ordered.forEach(c=>{const section=document.getElementById('menu-category-'+c.id);if(section)observer.observe(section)});window.menuCategoryObserver=observer;
+ // A categoria ativa é definida pela posição real do topo das seções.
+ // Isso evita que uma seção anterior, ainda parcialmente visível, vença a próxima.
+ if(window.menuCategoryScrollHandler){
+  window.removeEventListener('scroll',window.menuCategoryScrollHandler);
+  window.removeEventListener('resize',window.menuCategoryScrollHandler);
+ }
+ let categoryScrollFrame=0;
+ const updateActiveCategory=()=>{
+  if(categoryScrollFrame)return;
+  categoryScrollFrame=requestAnimationFrame(()=>{
+   categoryScrollFrame=0;
+   if(window.scrollY<180){
+    if(category!=='all'){category='all';drawCategories();}
+    return;
+   }
+   const sections=ordered.map(c=>document.getElementById('menu-category-'+c.id)).filter(Boolean);
+   if(!sections.length)return;
+   const atPageBottom=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-4;
+   let active=sections[0];
+   if(atPageBottom)active=sections[sections.length-1];
+   else{
+    const activationLine=145;
+    for(const section of sections){
+     if(section.getBoundingClientRect().top<=activationLine)active=section;
+     else break;
+    }
+   }
+   const nextCategory=active.id.replace('menu-category-','');
+   if(category!==nextCategory){category=nextCategory;drawCategories();}
+  });
+ };
+ window.menuCategoryScrollHandler=updateActiveCategory;
+ window.addEventListener('scroll',updateActiveCategory,{passive:true});
+ window.addEventListener('resize',updateActiveCategory,{passive:true});
+ updateActiveCategory();
 }
 function isQuentinhaProduct(product){const productCategory=categories.find(item=>item.id===product?.category_id)?.name||'';const normalized=String(productCategory).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();return normalized==='quentinha'||normalized==='quentinhas'}
 function addItem(id){
