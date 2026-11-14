@@ -243,8 +243,6 @@ async function load(){
 }
 function drawCategories(){
  const root=$('categories');root.replaceChildren();
- const all=document.createElement('button');all.type='button';all.className='cat'+(category==='all'?' active':'');all.textContent='Geral';
- all.onclick=()=>{category='all';drawCategories();window.scrollTo({top:0,behavior:'smooth'})};root.appendChild(all);
  const labels={quentinha:'Quentinha',porcao:'Porções',sobremesa:'Sobremesas',bebida:'Bebidas'};
  categories.forEach(c=>{const key=categoryKey(c.name);const button=document.createElement('button');button.type='button';button.className='cat'+(category===c.id?' active':'');button.textContent=labels[key]||c.name;button.onclick=()=>{category=c.id;drawCategories();document.getElementById('menu-category-'+c.id)?.scrollIntoView({behavior:'smooth',block:'start'})};root.appendChild(button)});
 }
