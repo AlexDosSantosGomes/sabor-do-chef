@@ -34,7 +34,7 @@ Deno.serve(async (req: Request) => {
   if (!supabaseUrl || !serviceKey) return reply({ error: "Configuração do servidor ausente" }, 500);
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  if (body.action === "admin_pair" || body.action === "admin_status") {
+  if (body.action === "admin_pair" || body.action === "admin_status" || body.action === "admin_reprint") {
     const authHeader = req.headers.get("authorization") ?? "";
     const jwt = authHeader.replace(/^Bearer\s+/i, "");
     if (!jwt) return reply({ error: "Entre novamente no painel administrativo." }, 401);
