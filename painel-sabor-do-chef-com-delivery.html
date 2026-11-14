@@ -1117,10 +1117,10 @@ async function loadDeliveryOrders() {
   const statusNames = {
     RECEBIDO: 'Pendente de aprovação',
     AGUARDANDO_APROVACAO: 'Pendente de aprovação',
-    APROVADO: 'Pedido aceito',
-    ENVIADO_IMPRESSAO: 'Pedido aceito',
-    IMPRESSO: 'Pedido aceito',
-    FALHA_IMPRESSAO: 'Pedido aceito',
+    APROVADO: 'Aceito',
+    ENVIADO_IMPRESSAO: 'Aceito',
+    IMPRESSO: 'Impresso',
+    FALHA_IMPRESSAO: 'Aceito',
     ENTREGUE: 'Pedido entregue',
     CANCELADO: 'Pedido cancelado'
   };
@@ -1150,7 +1150,7 @@ async function loadDeliveryOrders() {
           <button class="danger" type="button" data-order-reject="${order.id}">Cancelar pedido</button>
         ` : ''}
         ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">${isPickup ? 'Marcar como retirado' : 'Marcar como entregue'}</button>` : ''}
-        ${canPrint ? `<button class="primary" type="button" data-order-print-both="${order.id}">Imprimir as duas vias</button>` : ''}
+        ${canPrint ? `<button class="primary" type="button" data-order-print-both="${order.id}">${order.status === 'IMPRESSO' ? 'Imprimir duas vias novamente' : 'Imprimir duas vias'}</button>` : ''}
         
       </div>`;
     const isNewOrder = isPending;
@@ -1307,7 +1307,7 @@ function printDeliveryTickets(order, ticketType = 'both') {
     const courierLines = [];
     items.forEach(item => courierLines.push(...wrap(Math.max(1, Number(item.quantity) || 1) + 'x ' + item.product_name_snapshot)));
     const kitchen = [
-      center('SABOR DO CHEF'), center('VIA DA COZINHA'),
+      center('SABOR DO CHEF'), center('VIA DO CAIXA'),
       center('PEDIDO #' + order.order_number), center(date), divider,
       'ITENS DO PEDIDO', ...kitchenLines, divider,
       'OBSERVACAO DO CLIENTE', ...wrap(order.customer_notes || 'Nenhuma'),
@@ -1319,6 +1319,7 @@ function printDeliveryTickets(order, ticketType = 'both') {
       'CLIENTE: ' + (order.customer_name || 'Nao informado'),
       'TELEFONE: ' + (order.customer_phone || 'Nao informado'),
       'ENDERECO:', ...wrap(order.delivery_address || 'Nao informado'),
+      'OBSERVACAO DO CLIENTE:', ...wrap(order.customer_notes || 'Nenhuma'),
       divider, 'ITENS:', ...courierLines, divider,
       'PAGAMENTO: ' + (paymentNames[order.payment_method] || order.payment_method || 'Nao informado'),
       ...(order.needs_change ? ['CLIENTE PAGA COM: ' + money(order.change_for_cents),
@@ -1383,7 +1384,7 @@ function printDeliveryTickets(order, ticketType = 'both') {
     Math.max(1, Number(item.quantity) || 1) + 'x ' + escapeHTML(item.product_name_snapshot) +
     '</strong></div>').join('');
 
-  const kitchen = '<section class="ticket"><h1>SABOR DO CHEF</h1><h2>VIA DA COZINHA</h2>' +
+  const kitchen = '<section class="ticket"><h1>SABOR DO CHEF</h1><h2>VIA DO CAIXA</h2>' +
     '<div class="order-number">PEDIDO #' + escapeHTML(order.order_number) + '</div>' +
     '<div class="muted">' + escapeHTML(date) + '</div><hr>' +
     '<h3>ITENS DO PEDIDO</h3>' + (kitchenItems || '<p>Itens não informados</p>') +
@@ -1395,7 +1396,8 @@ function printDeliveryTickets(order, ticketType = 'both') {
     '<div class="muted">' + escapeHTML(date) + '</div><hr>' +
     '<h3>CLIENTE</h3><p class="customer">' + escapeHTML(order.customer_name || 'Não informado') + '</p>' +
     '<p><strong>Telefone:</strong><br>' + escapeHTML(order.customer_phone || 'Não informado') + '</p>' +
-    '<p><strong>Endereço:</strong><br>' + escapeHTML(order.delivery_address || 'Não informado') + '</p><hr>' +
+    '<p><strong>Endereço:</strong><br>' + escapeHTML(order.delivery_address || 'Não informado') + '</p>' +
+    '<p><strong>Observação do cliente:</strong><br>' + escapeHTML(order.customer_notes || 'Nenhuma') + '</p><hr>' +
     '<h3>ITENS</h3>' + (courierItems || '<p>Itens não informados</p>') + '<hr>' +
     '<h3>PAGAMENTO</h3><p>' + escapeHTML(paymentNames[order.payment_method] || order.payment_method || 'Não informado') + '</p>' +
     (order.needs_change ? '<p><strong>Cliente paga com:</strong> ' + money(tendered) + '<br><strong>TROCO A DEVOLVER:</strong> ' + money(changeDue) + '</p>' : '') +
