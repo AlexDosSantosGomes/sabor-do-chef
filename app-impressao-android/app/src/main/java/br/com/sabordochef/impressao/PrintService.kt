@@ -80,7 +80,7 @@ class PrintService : Service() {
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
-                    Thread.sleep(8000)
+                    Thread.sleep(25000)
                     continue
                 }
 
@@ -171,7 +171,7 @@ class PrintService : Service() {
         val number = order.optString("order_number", "N/I")
         val kitchen = StringBuilder()
         kitchen.append("SABOR DO CHEF\n")
-            .append("VIA COZINHA\n")
+            .append("VIA CAIXA\n")
             .append("--------------------------------\n")
             .append("PEDIDO #").append(number).append("\n")
             .append("CLIENTE: ").append(order.optString("customer_name", "Não informado")).append("\n")
@@ -215,6 +215,12 @@ class PrintService : Service() {
             .append("ENDEREÇO: ").append(order.optString("delivery_address", "Não informado")).append("\n")
             .append("PAGAMENTO: ").append(payment).append("\n")
             .append("TOTAL: ").append(currency).append("\n")
+            .also { if (order.optBoolean("needs_change")) {
+                val changeFor = order.optInt("change_for_cents", 0)
+                it.append("VAI PAGAR COM: R$ ").append(amountFormat.format(changeFor / 100.0)).append("\n")
+                    .append("TROCO: R$ ").append(amountFormat.format((changeFor - order.optInt("total_cents", 0)) / 100.0)).append("\n")
+            } }
+            .also { val notes = order.optString("customer_notes"); if (notes.isNotBlank() && notes != "null") it.append("OBSERVAÇÃO: ").append(notes).append("\n") }
             .append("--------------------------------\n")
             .append("ITENS\n")
         if (items != null) {
@@ -274,6 +280,7 @@ class PrintService : Service() {
             .append("Horário do pedido: ").append(time).append("\n")
             .append("Cliente: ").append(order.optString("customer_name", "Não informado")).append("\n")
             .append("Telefone: ").append(order.optString("customer_phone", "Não informado")).append("\n")
+            .also { val notes = order.optString("customer_notes"); if (notes.isNotBlank() && notes != "null") it.append("Observação: ").append(notes).append("\n") }
             .append("--------------------------------\n")
             .append("PRODUTOS\n")
 
