@@ -65,11 +65,14 @@ Deno.serve(async (req: Request) => {
   if (token.length < 32) return reply({ error: "Dispositivo não autorizado" }, 401);
   const tokenHash = await sha256(token);
   const { data: device, error: deviceError } = await db.from("printer_devices")
-    .select("id, name").eq("token_hash", tokenHash).eq("active", true).maybeSingle();
+    .select("id, name, last_seen_at").eq("token_hash", tokenHash).eq("active", true).maybeSingle();
   if (deviceError || !device) return reply({ error: "Dispositivo não autorizado" }, 401);
 
-  await db.from("printer_devices")
-    .update({ last_seen_at: new Date().toISOString() }).eq("id", device.id);
+  const lastSeenMs = device.last_seen_at ? new Date(device.last_seen_at).getTime() : 0;
+  if (!lastSeenMs || Date.now() - lastSeenMs >= 60_000) {
+    await db.from("printer_devices")
+      .update({ last_seen_at: new Date().toISOString() }).eq("id", device.id);
+  }
 
   if (body.action === "claim") {
     const now = new Date();
