@@ -169,80 +169,75 @@ class PrintService : Service() {
         }
 
         val number = order.optString("order_number", "N/I")
-        val kitchen = StringBuilder()
-        kitchen.append("SABOR DO CHEF\n")
-            .append("VIA CAIXA\n")
-            .append("--------------------------------\n")
-            .append("PEDIDO #").append(number).append("\n")
-            .append("CLIENTE: ").append(order.optString("customer_name", "Não informado")).append("\n")
-            .append("--------------------------------\n")
-        if (items != null) {
-            for (i in 0 until items.length()) {
-                val item = items.getJSONObject(i)
-                kitchen.append(item.optInt("quantity", 1)).append("x ")
-                    .append(item.optString("product_name_snapshot")).append("\n")
-                accByItem[item.optString("id")]?.forEach { kitchen.append("  + ").append(it).append("\n") }
-                val notes = item.optString("notes")
-                if (notes.isNotBlank() && notes != "null") kitchen.append("  Obs: ").append(notes).append("\n")
-            }
-        }
-        val customerNotes = order.optString("customer_notes")
-        if (customerNotes.isNotBlank() && customerNotes != "null") {
-            kitchen.append("--------------------------------\nOBS: ").append(customerNotes).append("\n")
-        }
-        kitchen.append("\n\n")
-
+        val totalCents = order.optInt("total_cents", 0)
+        val changeForCents = order.optInt("change_for_cents", 0)
+        val hasChange = order.optBoolean("needs_change") || changeForCents > totalCents
         val amountFormat = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply {
             minimumFractionDigits = 2
             maximumFractionDigits = 2
         }
-        val currency = "R$ " + amountFormat.format(order.optInt("total_cents", 0) / 100.0)
+        fun brl(cents: Int) = "R$ " + amountFormat.format(cents / 100.0)
+        val total = brl(totalCents)
         val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
             "CASH" -> "Dinheiro na entrega"
             "PIX" -> "Pix na entrega"
             "CARD" -> "Cartão na entrega"
             "PAGAMENTO_NA_ENTREGA" -> "Pagamento na entrega"
-            else -> order.optString("payment_method", "Pagamento na entrega")
-                .replace("_", " ")
+            else -> order.optString("payment_method", "Pagamento na entrega").replace("_", " ")
         }
-        val courier = StringBuilder()
-            .append("SABOR DO CHEF\n")
-            .append("VIA ENTREGADOR\n")
-            .append("--------------------------------\n")
-            .append("PEDIDO #").append(number).append("\n")
-            .append("CLIENTE: ").append(order.optString("customer_name", "—")).append("\n")
-            .append("TELEFONE: ").append(order.optString("customer_phone", "Não informado")).append("\n")
-            .append("ENDEREÇO: ").append(order.optString("delivery_address", "Não informado")).append("\n")
-            .append("PAGAMENTO: ").append(payment).append("\n")
-            .append("TOTAL: ").append(currency).append("\n")
-            .also { if (order.optBoolean("needs_change")) {
-                val changeFor = order.optInt("change_for_cents", 0)
-                it.append("VAI PAGAR COM: R$ ").append(amountFormat.format(changeFor / 100.0)).append("\n")
-                    .append("TROCO: R$ ").append(amountFormat.format((changeFor - order.optInt("total_cents", 0)) / 100.0)).append("\n")
-            } }
-            .also { val notes = order.optString("customer_notes"); if (notes.isNotBlank() && notes != "null") it.append("OBSERVAÇÃO: ").append(notes).append("\n") }
-            .append("--------------------------------\n")
-            .append("ITENS\n")
-        if (items != null) {
-            for (i in 0 until items.length()) {
-                val item = items.getJSONObject(i)
-                courier.append(item.optInt("quantity", 1)).append("x ")
-                    .append(item.optString("product_name_snapshot")).append("\n")
-                accByItem[item.optString("id")]?.forEach { courier.append("  + ").append(it).append("\n") }
-                val notes = item.optString("notes")
-                if (notes.isNotBlank() && notes != "null") courier.append("  Obs: ").append(notes).append("\n")
+        val createdAt = order.optString("created_at")
+        val createdInstant = try { Instant.parse(createdAt) } catch (_: Exception) { null }
+        val localDate = createdInstant?.atZone(ZoneId.of("America/Sao_Paulo"))
+        val dateTime = localDate?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")))
+            ?: "Data e horário não disponíveis"
+        val customerNotes = order.optString("customer_notes").takeUnless { it == "null" }.orEmpty()
+        val itemLines = buildString {
+            if (items != null) {
+                for (i in 0 until items.length()) {
+                    val item = items.getJSONObject(i)
+                    append(item.optInt("quantity", 1)).append("x ")
+                        .append(item.optString("product_name_snapshot")).append("\n")
+                    accByItem[item.optString("id")]?.forEach { append("  + ").append(it).append("\n") }
+                    val notes = item.optString("notes")
+                    if (notes.isNotBlank() && notes != "null") append("  Obs.: ").append(notes).append("\n")
+                }
             }
         }
-        courier.append("\n\n")
 
+        // As duas vias compartilham exatamente o mesmo conteúdo; somente o título muda.
+        fun buildCopy(title: String) = buildString {
+            append("SABOR DO CHEF\n")
+                .append(title).append("\n")
+                .append("--------------------------------\n")
+                .append("PEDIDO Nº ").append(number).append("\n")
+                .append("DATA/HORA: ").append(dateTime).append("\n")
+                .append("CLIENTE: ").append(order.optString("customer_name", "Não informado")).append("\n")
+                .append("TELEFONE: ").append(order.optString("customer_phone", "Não informado")).append("\n")
+                .append("ENDEREÇO: ").append(order.optString("delivery_address", "Não informado")).append("\n")
+                .append("PAGAMENTO: ").append(payment).append("\n")
+                .append("TOTAL: ").append(total).append("\n")
+            if (hasChange) {
+                append("VAI PAGAR COM: ").append(brl(changeForCents)).append("\n")
+                    .append("TROCO: ").append(brl(changeForCents - totalCents)).append("\n")
+            }
+            if (customerNotes.isNotBlank()) {
+                append("OBSERVAÇÃO DO CLIENTE: ").append(customerNotes).append("\n")
+            }
+            append("--------------------------------\n")
+                .append("ITENS DO PEDIDO\n")
+                .append(itemLines)
+                .append("--------------------------------\n\n\n")
+        }
+
+        val cashierCopy = PrinterText.encode(buildCopy("VIA DO CAIXA"))
+        val courierCopy = PrinterText.encode(buildCopy("VIA DO MOTOBOY"))
+        val cut = byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
         val out = java.io.ByteArrayOutputStream()
         out.write(PrinterText.initialize())
-        out.write(PrinterText.encode(kitchen.toString()))
-        // Alimenta e corta a via da cozinha.
-        out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
-        out.write(PrinterText.encode(courier.toString()))
-        // Alimenta e também corta a última via (entregador).
-        out.write(byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00))
+        out.write(cashierCopy)
+        out.write(cut)
+        out.write(courierCopy)
+        out.write(cut)
         return out.toByteArray()
     }
 
@@ -295,7 +290,7 @@ class PrintService : Service() {
             }
         }
 
-        if (order.optBoolean("needs_change")) {
+        if (order.optBoolean("needs_change") || order.optInt("change_for_cents", 0) > order.optInt("total_cents", 0)) {
             val changeFor = order.optInt("change_for_cents", 0)
             val changeDue = changeFor - order.optInt("total_cents", 0)
             ticket.append("--------------------------------\n")

@@ -1119,7 +1119,7 @@ async function loadDeliveryOrders() {
     AGUARDANDO_APROVACAO: 'Pendente de aprovação',
     APROVADO: 'Aceito',
     ENVIADO_IMPRESSAO: 'Aceito',
-    IMPRESSO: 'Impresso',
+    IMPRESSO: 'Aceito',
     FALHA_IMPRESSAO: 'Aceito',
     ENTREGUE: 'Pedido entregue',
     CANCELADO: 'Pedido cancelado'
@@ -1160,6 +1160,9 @@ async function loadDeliveryOrders() {
           <strong>Pedido #${escapeHTML(order.order_number)}</strong>
           <span class="order-status">${escapeHTML(isPickup && order.status === 'ENTREGUE' ? 'Pedido retirado' : (statusNames[order.status] || order.status))}</span>
         </div>
+        ${order.status === 'IMPRESSO' ? '<div class="status" style="display:inline-block;margin:0 0 8px;background:#e8f7ed;color:#16723a">Impresso</div>' : ''}
+        ${order.status === 'ENVIADO_IMPRESSAO' ? '<div class="status off" style="display:inline-block;margin:0 0 8px">Aguardando impressão</div>' : ''}
+        ${order.status === 'FALHA_IMPRESSAO' ? '<div class="status off" style="display:inline-block;margin:0 0 8px">Impressão pendente de nova tentativa</div>' : ''}
         ${isNewOrder ? '<div class="new-order-label">Novo pedido · precisa de aprovação</div>' : ''}
         <div class="order-meta">${date}</div>
         <div><strong>Modalidade:</strong> ${modalityLabel}</div>
@@ -1421,13 +1424,22 @@ function printDeliveryTickets(order, ticketType = 'both') {
 const handleOrderAction = async (event) => {
   const bothPrintButton = event.target.closest('[data-order-print-both]');
   if (bothPrintButton) {
-    const order = deliveryOrdersCache.get(bothPrintButton.dataset.orderPrintBoth);
-    if (!order) { alert('Não foi possível localizar os dados deste pedido. Atualize a lista e tente novamente.'); return; }
+    const orderId = bothPrintButton.dataset.orderPrintBoth;
+    if (!deliveryOrdersCache.has(orderId)) {
+      alert('Não foi possível localizar os dados deste pedido. Atualize a lista e tente novamente.');
+      return;
+    }
     bothPrintButton.disabled = true;
+    const originalLabel = bothPrintButton.textContent;
+    bothPrintButton.textContent = 'Enviando para a central...';
     try {
-      printDeliveryTickets(order, 'both');
-    } finally {
-      setTimeout(() => { bothPrintButton.disabled = false; }, 6500);
+      await printerAdminRequest({ action: 'admin_reprint', order_id: orderId });
+      alert('Duas vias enviadas para a fila da central de impressão.');
+      await loadDeliveryOrders();
+    } catch (error) {
+      alert('Não foi possível solicitar a reimpressão: ' + (error.message || error));
+      bothPrintButton.disabled = false;
+      bothPrintButton.textContent = originalLabel;
     }
     return;
   }
