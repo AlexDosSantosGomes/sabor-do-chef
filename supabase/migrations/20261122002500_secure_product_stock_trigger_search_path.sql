@@ -1,0 +1,1 @@
+alter function public.enforce_product_stock_availability() set search_path = public, pg_temp;
