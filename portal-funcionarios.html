@@ -143,7 +143,7 @@ async function startSession(user){
     $('roleLabel').textContent='Perfil identificado: '+role;
     $('adminLink').classList.toggle('hidden',role!=='ADMIN');
     if(role==='ADMIN'){
-      $('roleContent').innerHTML='<p>Seu perfil é de administrador. Use o painel completo para gerenciar o sistema.</p><a class="link primary" href="./painel-sabor-do-chef-com-delivery.html">Abrir painel administrativo</a>';
+      $('roleContent').innerHTML='<p>Seu perfil é de administrador. Use os atalhos abaixo para preparar os testes do salão.</p><p><a class="link primary" href="./painel-sabor-do-chef-com-delivery.html">Painel administrativo</a></p><p><a class="link secondary" href="./equipe-salao.html">Gerenciar perfis de funcionários</a></p><p><a class="link secondary" href="./qrs-salao.html">Gerar e imprimir QR Codes das mesas</a></p>';
     }else if(role==='SALON'){
       await loadSalonOverview();
     }else if(role==='DELIVERY'){
