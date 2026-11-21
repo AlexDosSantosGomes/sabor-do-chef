@@ -58,19 +58,54 @@ function showLogin(){ $('loginScreen').classList.remove('hidden');$('portalScree
 function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
 function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function loadSalonOverview(){
-  $('roleContent').innerHTML='<p class="muted">Carregando mesas e comandas...</p>';
-  const [{data:tables,error:tableError},{data:tabs,error:tabError}]=await Promise.all([
-    supabase.from('restaurant_tables').select('*'),
-    supabase.from('dining_tabs').select('*').eq('status','OPEN')
+  $('roleContent').innerHTML='<p class="muted">Carregando mesas, comandas e cardápio...</p>';
+  const [tr,tabr,pr]=await Promise.all([
+    supabase.from('restaurant_tables').select('id,table_number,active').order('table_number'),
+    supabase.from('dining_tabs').select('id,table_id,status,opened_at').eq('status','OPEN'),
+    supabase.from('products').select('id,name,price_cents,stock_quantity').eq('active',true).gt('stock_quantity',0).order('name')
   ]);
-  if(tableError) throw tableError;if(tabError) throw tabError;
-  const openByTable=new Map((tabs||[]).map(t=>[t.table_id,t]));
-  const list=(tables||[]).map((t,i)=>{
-    const id=t.id;const label=t.name||t.table_number||t.number||('Mesa '+(i+1));const tab=openByTable.get(id);
-    const active=t.is_active!==false&&t.active!==false;
-    return '<article class="table-card"><div class="top"><strong>'+safe(label)+'</strong><span class="pill '+(tab?'':'closed')+'">'+(tab?'Comanda aberta':'Sem comanda aberta')+'</span></div><p class="muted">'+(active?'Mesa ativa':'Mesa desativada')+'</p></article>';
+  if(tr.error)throw tr.error;if(tabr.error)throw tabr.error;if(pr.error)throw pr.error;
+  const tables=tr.data||[],tabs=tabr.data||[],products=pr.data||[];
+  const tabIds=tabs.map(t=>t.id);
+  let orders=[];
+  if(tabIds.length){
+    const or=await supabase.from('orders').select('id,order_number,dining_tab_id,total_cents,created_at,customer_notes,order_items(product_name_snapshot,unit_price_cents,quantity,notes)').in('dining_tab_id',tabIds).order('created_at',{ascending:true});
+    if(or.error)throw or.error;orders=or.data||[];
+  }
+  const openByTable=new Map(tabs.map(t=>[t.table_id,t]));
+  const ordersByTab=new Map();
+  orders.forEach(o=>{if(!ordersByTab.has(o.dining_tab_id))ordersByTab.set(o.dining_tab_id,[]);ordersByTab.get(o.dining_tab_id).push(o)});
+  const money=c=>((Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}));
+  const options=products.map(p=>'<option value="'+p.id+'">'+safe(p.name)+' — '+money(p.price_cents)+' (estoque '+safe(p.stock_quantity)+')</option>').join('');
+  const cards=tables.map(t=>{
+    const tab=openByTable.get(t.id),tabOrders=tab?(ordersByTab.get(tab.id)||[]):[];
+    const total=tabOrders.reduce((sum,o)=>sum+Number(o.total_cents||0),0);
+    const orderHtml=tabOrders.map(o=>'<div class="table-card"><strong>Comanda #'+safe(o.order_number)+'</strong><ul>'+((o.order_items||[]).map(i=>'<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?' · '+safe(i.notes):'')+'</li>').join(''))+'</ul><small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></div>').join('');
+    const body=tab?'<p><strong>Total acumulado: '+money(total)+'</strong></p>'+(orderHtml||'<p class="muted">Ainda não há itens nesta comanda.</p>')+
+      '<form class="salon-add-form" data-tab="'+tab.id+'"><label>Adicionar produto</label><select name="product_id" required>'+options+'</select><label>Quantidade</label><input name="quantity" type="number" min="1" max="20" value="1" required><label>Observação do item (opcional)</label><input name="notes" maxlength="200" placeholder="Ex.: sem cebola"><label>Observação do pedido (opcional)</label><input name="customer_notes" maxlength="300" placeholder="Observação para a cozinha"><button class="primary full" type="submit">Adicionar à comanda</button></form><button class="danger full salon-close" data-tab="'+tab.id+'">Fechar comanda</button>'
+      :'<p class="muted">Mesa sem comanda aberta.</p>'+(t.active?'<button class="primary salon-open" data-table="'+t.id+'">Abrir comanda</button>':'<span class="pill closed">Mesa inativa</span>');
+    return '<article class="order-card"><div class="top"><strong>Mesa '+safe(t.table_number)+'</strong><span class="pill '+(tab?'':'closed')+'">'+(tab?'Comanda aberta':'Livre')+'</span></div>'+body+'</article>';
   }).join('');
-  $('roleContent').innerHTML='<h2 style="margin-top:20px">Visão das mesas</h2><p class="muted">Esta primeira versão permite conferir as mesas e identificar comandas abertas. Abertura de comanda, lançamento de itens, fechamento e impressão serão liberados após concluir e testar as permissões de pedidos.</p><div class="grid">'+(list||'<p>Nenhuma mesa encontrada.</p>')+'</div>';
+  $('roleContent').innerHTML='<div class="top"><h2>Salão · 10 mesas</h2><button class="secondary" id="refreshSalon">Atualizar</button></div><p class="muted">Os pedidos lançados aqui ficam vinculados à comanda aberta. O pagamento é realizado na saída. Impressão e QR Code do cliente serão integrados na próxima etapa.</p><div class="grid">'+(cards||'<p>Nenhuma mesa cadastrada.</p>')+'</div>';
+  $('refreshSalon').addEventListener('click',loadSalonOverview);
+  $('roleContent').querySelectorAll('.salon-open').forEach(btn=>btn.addEventListener('click',async()=>{
+    btn.disabled=true;const {error}=await supabase.rpc('open_dining_tab',{p_table_id:btn.dataset.table});
+    if(error){alert(error.message);btn.disabled=false;return;}await loadSalonOverview();
+  }));
+  $('roleContent').querySelectorAll('.salon-close').forEach(btn=>btn.addEventListener('click',async()=>{
+    if(!confirm('Confirma o fechamento desta comanda? A mesa ficará livre para um novo atendimento.'))return;
+    btn.disabled=true;const {error}=await supabase.rpc('close_dining_tab',{p_tab_id:btn.dataset.tab,p_closing_note:null});
+    if(error){alert(error.message);btn.disabled=false;return;}await loadSalonOverview();
+  }));
+  $('roleContent').querySelectorAll('.salon-add-form').forEach(form=>form.addEventListener('submit',async e=>{
+    e.preventDefault();const fd=new FormData(form);const productId=fd.get('product_id');
+    const payload=[{product_id:productId,quantity:Number(fd.get('quantity')),notes:String(fd.get('notes')||'')}];
+    const submit=form.querySelector('button[type="submit"]');submit.disabled=true;
+    const {data,error}=await supabase.rpc('create_salon_order',{p_tab_id:form.dataset.tab,p_items:payload,p_customer_notes:String(fd.get('customer_notes')||'')});
+    if(error){alert(error.message);submit.disabled=false;return;}
+    alert('Pedido #'+data.order_number+' adicionado à comanda. Total: '+money(data.total_cents));
+    await loadSalonOverview();
+  }));
 }
 
 async function loadDeliveryOrders(){
