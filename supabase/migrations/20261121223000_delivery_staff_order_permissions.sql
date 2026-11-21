@@ -20,7 +20,7 @@ begin
  if v_type not in ('DELIVERY'::public.order_type,'PICKUP'::public.order_type) then raise exception 'Este pedido não pertence à entrega ou retirada.'; end if;
  if p_action='APPROVE' then
   if v_status not in ('RECEBIDO'::public.order_status,'AGUARDANDO_APROVACAO'::public.order_status) then raise exception 'Este pedido não está aguardando aprovação.'; end if;
-  update public.orders set status='APROVADO',approved_by=(select auth.uid()),approved_at=now(),cancellation_reason=null,cancelled_at=null where id=p_order_id;
+  update public.orders set status='APROVADO',approved_by=case when private.is_active_admin() then (select auth.uid()) else null end,approved_at=now(),cancellation_reason=null,cancelled_at=null where id=p_order_id;
  elsif p_action='REJECT' then
   if v_status not in ('RECEBIDO'::public.order_status,'AGUARDANDO_APROVACAO'::public.order_status) then raise exception 'Somente pedidos aguardando aprovação podem ser recusados.'; end if;
   if length(trim(coalesce(p_reason,'')))<3 or length(p_reason)>300 then raise exception 'Informe o motivo da recusa (3 a 300 caracteres).'; end if;
