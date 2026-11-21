@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#b5121b">
+<title>Sabor do Chef | Pedido no salão</title>
+<style>
+:root{--red:#b5121b;--bg:#f5f5f7;--ink:#252832;--muted:#737985;--line:#e7e9ee}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:linear-gradient(120deg,#790d13,var(--red));color:white;padding:22px 16px;text-align:center}header h1{margin:0;font-size:25px}header p{margin:5px 0 0;opacity:.92}
+main{max-width:850px;margin:18px auto;padding:0 13px}.card{background:white;border:1px solid var(--line);border-radius:16px;padding:17px;margin-bottom:14px;box-shadow:0 5px 18px #20263808}
+.muted{color:var(--muted);font-size:13px}.notice{padding:14px;border-radius:12px;background:#fff6df;border:1px solid #f1d99b;margin-top:12px}
+.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.product{display:flex;gap:12px;align-items:center;border:1px solid var(--line);padding:12px;border-radius:13px}.product img{width:84px;height:84px;object-fit:cover;border-radius:10px;background:#eee}.product-info{min-width:0;flex:1}.product h3{font-size:15px;margin:0 0 4px}.price{font-weight:850;color:var(--red);margin-top:5px}
+button,select,input,textarea{font:inherit}button{border:0;border-radius:10px;padding:10px 14px;background:var(--red);color:white;font-weight:800;cursor:pointer}button:disabled{opacity:.45}select,input,textarea{width:100%;padding:11px;border:1px solid #d7d9df;border-radius:9px;background:white}label{display:block;font-size:13px;font-weight:750;margin:12px 0 5px}
+.cart-row{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}.cart-row button{padding:5px 10px}.cart-row .minor{background:#f0f1f4;color:#333}.unit-detail{font-size:12px;color:var(--muted);margin-top:3px}.total{font-size:21px;font-weight:900;text-align:right;margin:14px 0}.hidden{display:none!important}
+.modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}.modal-card{background:white;width:min(100%,440px);max-height:85vh;overflow:auto;border-radius:17px;padding:20px}.accomp-list{display:grid;gap:9px}.accomp-option{display:flex;align-items:center;gap:10px;border:1px solid var(--line);padding:11px;border-radius:10px;margin:0}.accomp-option input{width:18px;height:18px;flex:none}.modal-actions{display:flex;gap:9px;margin-top:18px}.modal-actions button{flex:1}.secondary{background:#eff0f3;color:#333}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
+@media(max-width:520px){main{margin:13px auto}.card{padding:14px}.products{grid-template-columns:1fr}.product img{width:76px;height:76px}}
+</style>
+</head>
+<body>
+<header><h1>Sabor do Chef</h1><p>Cardápio digital · Faça seu pedido com facilidade</p></header>
+<main>
+<section class="card"><h2 id="tableTitle">Carregando mesa...</h2><p id="tableMessage" class="muted">Validando QR Code.</p><div id="closedNotice" class="notice hidden">Esta mesa ainda não está recebendo pedidos. Chame um funcionário para abrir a comanda.</div></section>
+<section id="menuSection" class="card hidden"><h2>Cardápio</h2><label for="categoryFilter">Categoria</label><select id="categoryFilter"><option value="">Todas as categorias</option></select><div id="products" class="products"></div></section>
+<section id="cartSection" class="card hidden"><h2>Seu pedido</h2><div id="cart"></div><label for="notes">Observação para a equipe (opcional)</label><textarea id="notes" rows="2" maxlength="300" placeholder="Alguma orientação?"></textarea><div id="total" class="total">R$ 0,00</div><button id="sendOrder" style="width:100%">Enviar pedido para a mesa</button><p class="muted">O pagamento será feito na saída, junto com a conta da mesa.</p></section>
+<section id="success" class="card hidden"><h2>Pedido enviado!</h2><p id="successText"></p><p class="muted">Seu pedido foi adicionado à comanda da mesa. Você pode continuar escolhendo outros itens.</p><button id="continue" style="width:100%">Continuar escolhendo</button></section>
+</main>
+<div id="accompModal" class="modal hidden"><div class="modal-card"><h2 id="accompTitle">Escolha os acompanhamentos</h2><p class="muted">Opcional · Escolha até 2 por quentinha, sem custo adicional.</p><div id="accompOptions" class="accomp-list"></div><div class="modal-actions"><button id="accompCancel" class="secondary" type="button">Cancelar</button><button id="accompConfirm" type="button">Adicionar ao pedido</button></div></div></div>
+<footer>Pagamento na saída · Sabor do Chef</footer>
+<script type="module">
+import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const db=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
+const $=id=>document.getElementById(id),token=new URLSearchParams(location.search).get('mesa');
+let cart=new Map(),products=[],categories=[],accompaniments=new Map(),pendingProduct=null,tableNumber=null;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+function isQuentinha(p){const name=categories.find(c=>c.id===p.category_id)?.name;return ['quentinha','quentinhas'].includes(norm(name))}
+async function init(){
+ if(!token){$('tableTitle').textContent='QR Code inválido';$('tableMessage').textContent='Não encontramos o código desta mesa.';return;}
+ const {data:ctx,error}=await db.rpc('get_salon_qr_context',{p_qr_token:token});
+ if(error||!ctx){$('tableTitle').textContent='Não foi possível abrir o cardápio';$('tableMessage').textContent=error?.message||'Erro ao validar mesa.';return;}
+ tableNumber=ctx.table_number;$('tableTitle').textContent='Mesa '+tableNumber;
+ if(!ctx.has_open_tab){$('tableMessage').textContent='Aguardando abertura da comanda.';$('closedNotice').classList.remove('hidden');return;}
+ $('tableMessage').textContent='Comanda aberta · Escolha seus produtos.';
+ const [pr,cr,ar]=await Promise.all([
+  db.from('products').select('id,name,description,price_cents,photo_url,category_id,stock_quantity').eq('active',true).gt('stock_quantity',0).order('name'),
+  db.from('categories').select('id,name,sort_order').eq('active',true).order('sort_order'),
+  db.from('product_accompaniments').select('id,product_id,name,sort_order').eq('active',true).order('sort_order')
+ ]);
+ if(pr.error||cr.error||ar.error){$('tableMessage').textContent=(pr.error||cr.error||ar.error).message;return;}
+ categories=cr.data||[];products=pr.data||[];
+ (ar.data||[]).forEach(a=>{if(!accompaniments.has(a.product_id))accompaniments.set(a.product_id,[]);accompaniments.get(a.product_id).push(a.name)});
+ $('categoryFilter').innerHTML='<option value="">Todas as categorias</option>'+categories.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('');
+ $('menuSection').classList.remove('hidden');renderProducts();
+}
+function renderProducts(){
+ const category=$('categoryFilter').value,list=products.filter(p=>(!category||p.category_id===category)&&p.stock_quantity>0);
+ $('products').innerHTML=list.map(p=>'<article class="product">'+(p.photo_url?'<img loading="lazy" src="'+esc(p.photo_url)+'" alt="'+esc(p.name)+'">':'')+'<div class="product-info"><h3>'+esc(p.name)+'</h3><div class="muted">'+esc(p.description||'')+'</div><div class="price">'+money(p.price_cents)+'</div></div><button data-add="'+p.id+'">Adicionar</button></article>').join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>';
+ $('products').querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',()=>addProduct(b.dataset.add)));
+}
+function addProduct(id){
+ const p=products.find(x=>x.id===id);if(!p)return;
+ const units=cart.get(id)?.units.length||0;if(units>=p.stock_quantity){alert('Limite de estoque atingido.');return;}
+ const options=isQuentinha(p)?(accompaniments.get(id)||[]):[];
+ if(!options.length){addUnit(p,[]);return;}
+ pendingProduct=p;$('accompTitle').textContent='Acompanhamentos · '+p.name;
+ $('accompOptions').innerHTML=options.map(n=>'<label class="accomp-option"><input type="checkbox" value="'+esc(n)+'"><span>'+esc(n)+'</span></label>').join('');
+ $('accompOptions').querySelectorAll('input').forEach(input=>input.addEventListener('change',()=>{const checked=$('accompOptions').querySelectorAll('input:checked');if(checked.length>2){input.checked=false;alert('Você pode escolher no máximo 2 acompanhamentos.')}}));
+ $('accompModal').classList.remove('hidden');
+}
+function closeModal(){$('accompModal').classList.add('hidden');pendingProduct=null}
+$('accompCancel').addEventListener('click',closeModal);
+$('accompConfirm').addEventListener('click',()=>{if(!pendingProduct)return;const selected=[...$('accompOptions').querySelectorAll('input:checked')].map(x=>x.value);addUnit(pendingProduct,selected);closeModal()});
+function addUnit(p,selected){const x=cart.get(p.id)||{product:p,units:[]};x.units.push([...selected]);cart.set(p.id,x);renderCart()}
+function changeQty(id,delta){const x=cart.get(id);if(!x)return;if(delta>0){addProduct(id);return;}x.units.pop();if(!x.units.length)cart.delete(id);renderCart()}
+function renderCart(){
+ const rows=[...cart.values()];$('cartSection').classList.toggle('hidden',rows.length===0);
+ $('cart').innerHTML=rows.map(x=>'<div class="cart-row"><div><strong>'+esc(x.product.name)+'</strong><div class="muted">'+money(x.product.price_cents*x.units.length)+'</div>'+(isQuentinha(x.product)?x.units.map((s,i)=>s.length?'<div class="unit-detail">Quentinha '+(i+1)+': '+s.map(esc).join(', ')+'</div>':'').join(''):'')+'</div><div><button class="minor" data-minus="'+x.product.id+'">−</button> '+x.units.length+' <button data-plus="'+x.product.id+'">+</button></div></div>').join('');
+ const total=rows.reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0);$('total').textContent=money(total);
+ $('cart').querySelectorAll('[data-minus]').forEach(b=>b.addEventListener('click',()=>changeQty(b.dataset.minus,-1)));
+ $('cart').querySelectorAll('[data-plus]').forEach(b=>b.addEventListener('click',()=>changeQty(b.dataset.plus,1)));
+}
+$('categoryFilter').addEventListener('change',renderProducts);
+$('sendOrder').addEventListener('click',async()=>{
+ const rows=[...cart.values()];if(!rows.length)return;
+ $('sendOrder').disabled=true;$('sendOrder').textContent='Enviando...';
+ const payload=rows.map(x=>({product_id:x.product.id,quantity:x.units.length,accompaniments_by_unit:isQuentinha(x.product)?x.units:x.units.map(()=>[])}));
+ const {data,error}=await db.rpc('create_salon_qr_order',{p_qr_token:token,p_items:payload,p_customer_notes:$('notes').value.trim()});
+ $('sendOrder').disabled=false;$('sendOrder').textContent='Enviar pedido para a mesa';
+ if(error){alert(error.message);return;}
+ $('successText').textContent='Pedido #'+data.order_number+' enviado para a mesa '+data.table_number+'. Total deste pedido: '+money(data.total_cents)+'.';
+ $('success').classList.remove('hidden');$('cartSection').classList.add('hidden');cart.clear();$('notes').value='';
+});
+$('continue').addEventListener('click',()=>{$('success').classList.add('hidden');$('menuSection').scrollIntoView({behavior:'smooth'});});
+init();
+</script>
+</body></html>

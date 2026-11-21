@@ -50,7 +50,7 @@ Deno.serve(async (req: Request) => {
         .select("id, order_type, status")
         .eq("id", body.order_id).maybeSingle();
       if (orderError || !order) return reply({ error: "Pedido não encontrado." }, 404);
-      if (!["DELIVERY", "PICKUP"].includes(order.order_type) || order.status === "CANCELADO") {
+      if (!["DELIVERY", "PICKUP", "SALAO"].includes(order.order_type) || order.status === "CANCELADO") {
         return reply({ error: "Este pedido não pode ser reimpresso." }, 409);
       }
       const { error: queueError } = await db.from("print_jobs").upsert({
@@ -165,6 +165,20 @@ Deno.serve(async (req: Request) => {
           next_attempt_at: retryAt, last_error: "Pedido não encontrado; nova tentativa programada."
         }).eq("id", claimed.id);
         return reply({ error: "Pedido não encontrado" }, 500);
+      }
+
+      if (order.order_type === "SALAO" && order.table_id) {
+        const { data: table, error: tableError } = await db.from("restaurant_tables")
+          .select("table_number").eq("id", order.table_id).maybeSingle();
+        if (tableError || !table) {
+          const retryAt = new Date(Date.now() + 15000).toISOString();
+          await db.from("print_jobs").update({
+            status: "PENDENTE", claimed_at: null, device_id: null,
+            next_attempt_at: retryAt, last_error: "Mesa não encontrada; nova tentativa programada."
+          }).eq("id", claimed.id);
+          return reply({ error: "Não foi possível identificar a mesa do pedido." }, 500);
+        }
+        order.table_number = table.table_number;
       }
 
       const { data: items, error: itemsError } = await db.from("order_items")

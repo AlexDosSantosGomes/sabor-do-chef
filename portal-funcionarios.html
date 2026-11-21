@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#b5121b">
+<title>Sabor do Chef | Acesso de funcionários</title>
+<style>
+:root{--red:#b5121b;--dark:#850d14;--bg:#f4f5f7;--text:#252832;--muted:#737985;--border:#e7e9ee}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+header{background:linear-gradient(115deg,#710b12,#b5121b 65%,#cf2931);color:#fff;padding:18px max(18px,calc((100% - 1080px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px}
+header h1{font-size:21px;margin:0;font-weight:850}header small{opacity:.88}
+main{width:min(1080px,calc(100% - 28px));margin:28px auto}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 8px 28px #2026380a;margin-bottom:16px}
+.login{max-width:430px;margin:64px auto}.brand{text-align:center;color:var(--red);font-size:27px;font-weight:900;margin-bottom:20px}
+h2{font-size:19px;margin:0 0 14px}label{display:block;font-size:13px;font-weight:750;margin:14px 0 6px}
+input{width:100%;padding:13px;border:1px solid #dfe2e8;border-radius:10px;font:inherit}
+button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;font-weight:800;text-decoration:none;cursor:pointer}
+.primary{background:var(--red);color:#fff}.secondary{background:#f1f2f5;color:#343944}
+.full{width:100%;margin-top:18px}.muted{color:var(--muted);font-size:13px}.message{font-size:14px;margin-top:12px}.error{color:#b00020}.success{color:#16723a}
+.hidden{display:none!important}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.order-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff;margin:12px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.danger{background:#fff0f0;color:#a10e18}.order-card ul{padding-left:20px}.table-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff}
+.pill{display:inline-block;border-radius:30px;padding:4px 9px;font-size:12px;font-weight:800;background:#edf7ef;color:#16723a}
+.pill.closed{background:#f1f2f5;color:#626875}
+.notice{padding:14px;border:1px solid #f0d99b;background:#fff9e9;border-radius:12px;margin-top:14px}
+@media(max-width:600px){main{margin:16px auto}.card{padding:17px}.login{margin:32px auto}}
+</style>
+</head>
+<body>
+<header><div><h1>Sabor do Chef</h1><small>Portal de funcionários</small></div><button id="logoutBtn" class="secondary hidden" type="button">Sair</button></header>
+<main>
+<section id="loginScreen" class="card login">
+<div class="brand">Sabor do Chef</div>
+<h2>Entrar como funcionário</h2>
+<p class="muted">Use o e-mail e a senha cadastrados para sua conta de acesso.</p>
+<form id="loginForm">
+<label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required placeholder="Seu e-mail">
+<label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" required placeholder="Sua senha">
+<button class="primary full" type="submit">Entrar</button>
+<div id="loginMessage" class="message" aria-live="polite"></div>
+</form>
+</section>
+<section id="portalScreen" class="hidden">
+<div class="card">
+<div class="top"><div><h2 id="welcomeTitle">Área do funcionário</h2><div id="roleLabel" class="muted"></div></div><a class="link secondary" href="./painel-sabor-do-chef-com-delivery.html" id="adminLink">Painel administrativo</a></div>
+<div id="roleContent"></div>
+<div id="portalMessage" class="message" aria-live="polite"></div>
+</div>
+</section>
+</main>
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
+const $=id=>document.getElementById(id);
+function message(id,text,type=''){const el=$(id);el.textContent=text;el.className='message '+type}
+function showLogin(){ $('loginScreen').classList.remove('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
+function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
+function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function loadSalonOverview(){
+  $('roleContent').innerHTML='<p class="muted">Carregando mesas, comandas e cardápio...</p>';
+  const [tr,tabr,pr]=await Promise.all([
+    supabase.from('restaurant_tables').select('id,table_number,active').order('table_number'),
+    supabase.from('dining_tabs').select('id,table_id,status,opened_at').eq('status','OPEN'),
+    supabase.from('products').select('id,name,price_cents,stock_quantity').eq('active',true).gt('stock_quantity',0).order('name')
+  ]);
+  if(tr.error)throw tr.error;if(tabr.error)throw tabr.error;if(pr.error)throw pr.error;
+  const tables=tr.data||[],tabs=tabr.data||[],products=pr.data||[];
+  const tabIds=tabs.map(t=>t.id);
+  let orders=[];
+  if(tabIds.length){
+    const or=await supabase.from('orders').select('id,order_number,dining_tab_id,total_cents,created_at,customer_notes,status,cancellation_reason,order_items(product_name_snapshot,unit_price_cents,quantity,notes,order_item_accompaniments(accompaniment_name,unit_index))').in('dining_tab_id',tabIds).order('created_at',{ascending:true});
+    if(or.error)throw or.error;orders=or.data||[];
+  }
+  const openByTable=new Map(tabs.map(t=>[t.table_id,t]));
+  const ordersByTab=new Map();
+  orders.forEach(o=>{if(!ordersByTab.has(o.dining_tab_id))ordersByTab.set(o.dining_tab_id,[]);ordersByTab.get(o.dining_tab_id).push(o)});
+  const money=c=>((Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}));
+  const options=products.map(p=>'<option value="'+p.id+'">'+safe(p.name)+' — '+money(p.price_cents)+' (estoque '+safe(p.stock_quantity)+')</option>').join('');
+  const cards=tables.map(t=>{
+    const tab=openByTable.get(t.id),tabOrders=tab?(ordersByTab.get(tab.id)||[]):[];
+    const total=tabOrders.reduce((sum,o)=>sum+Number(o.total_cents||0),0);
+    const orderHtml=tabOrders.map(o=>'<div class="table-card"><div class="top"><strong>Pedido #'+safe(o.order_number)+'</strong><span class="pill '+(o.status==='CANCELADO'?'closed':'')+'">'+safe(o.status)+'</span></div><ul>'+((o.order_items||[]).map(i=>'<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?' · '+safe(i.notes):'')+((i.order_item_accompaniments||[]).map(a=>'<div class="muted">Prato '+safe(a.unit_index)+': '+safe(a.accompaniment_name)+'</div>').join(''))+'</li>').join(''))+'</ul>'+(o.customer_notes?'<p class="muted">Obs.: '+safe(o.customer_notes)+'</p>':'')+(o.cancellation_reason?'<p class="muted">Motivo: '+safe(o.cancellation_reason)+'</p>':'')+(['RECEBIDO','AGUARDANDO_APROVACAO'].includes(o.status)?'<div class="actions"><button class="primary salon-order-action" data-action="APPROVE" data-order="'+o.id+'">Aceitar e imprimir</button><button class="danger salon-order-action" data-action="REJECT" data-order="'+o.id+'">Recusar</button></div>':'')+'<small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></div>').join('');
+    const body=tab?'<p><strong>Total acumulado: '+money(total)+'</strong></p>'+(orderHtml||'<p class="muted">Ainda não há itens nesta comanda.</p>')+
+      '<form class="salon-add-form" data-tab="'+tab.id+'"><label>Adicionar produto</label><select name="product_id" required>'+options+'</select><label>Quantidade</label><input name="quantity" type="number" min="1" max="20" value="1" required><label>Observação do item (opcional)</label><input name="notes" maxlength="200" placeholder="Ex.: sem cebola"><label>Observação do pedido (opcional)</label><input name="customer_notes" maxlength="300" placeholder="Observação para a cozinha"><button class="primary full" type="submit">Adicionar à comanda</button></form><label>Forma de pagamento na saída</label><select class="salon-payment" data-tab="'+tab.id+'"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button class="danger full salon-close" data-tab="'+tab.id+'">Fechar conta e liberar mesa</button>'
+      :'<p class="muted">Mesa sem comanda aberta.</p>'+(t.active?'<button class="primary salon-open" data-table="'+t.id+'">Abrir comanda</button>':'<span class="pill closed">Mesa inativa</span>');
+    return '<article class="order-card"><div class="top"><strong>Mesa '+safe(t.table_number)+'</strong><span class="pill '+(tab?'':'closed')+'">'+(tab?'Comanda aberta':'Livre')+'</span></div>'+body+'</article>';
+  }).join('');
+  $('roleContent').innerHTML='<div class="top"><h2>Salão · 10 mesas</h2><button class="secondary" id="refreshSalon">Atualizar</button></div><p class="muted">Os pedidos lançados aqui ficam vinculados à comanda aberta. O pagamento é realizado na saída. Impressão e QR Code do cliente serão integrados na próxima etapa.</p><div class="grid">'+(cards||'<p>Nenhuma mesa cadastrada.</p>')+'</div>';
+  $('refreshSalon').addEventListener('click',loadSalonOverview);
+  $('roleContent').querySelectorAll('.salon-open').forEach(btn=>btn.addEventListener('click',async()=>{
+    btn.disabled=true;const {error}=await supabase.rpc('open_dining_tab',{p_table_id:btn.dataset.table});
+    if(error){alert(error.message);btn.disabled=false;return;}await loadSalonOverview();
+  }));
+  $('roleContent').querySelectorAll('.salon-close').forEach(btn=>btn.addEventListener('click',async()=>{
+    const payment=$('roleContent').querySelector('.salon-payment[data-tab="'+btn.dataset.tab+'"]')?.value;
+    if(!payment)return;
+    if(!confirm('Confirma o recebimento do pagamento ('+payment+') e o fechamento desta conta? A mesa será liberada.'))return;
+    btn.disabled=true;
+    const {data,error}=await supabase.rpc('close_dining_tab_with_payment',{p_tab_id:btn.dataset.tab,p_payment_method:payment,p_closing_note:null});
+    if(error){alert(error.message);btn.disabled=false;return;}
+    alert('Conta fechada. Total recebido: '+money(data.total_cents));
+    await loadSalonOverview();
+  }));
+  $('roleContent').querySelectorAll('.salon-order-action').forEach(btn=>btn.addEventListener('click',async()=>{
+    let reason=null;
+    if(btn.dataset.action==='REJECT'){reason=window.prompt('Informe o motivo da recusa:');if(reason===null)return;if(reason.trim().length<3){alert('Informe um motivo com pelo menos 3 caracteres.');return;}}
+    btn.disabled=true;
+    const {error}=await supabase.rpc('set_salon_order_action',{p_order_id:btn.dataset.order,p_action:btn.dataset.action,p_reason:reason});
+    if(error){alert(error.message);btn.disabled=false;return;}
+    await loadSalonOverview();
+  }));
+  $('roleContent').querySelectorAll('.salon-add-form').forEach(form=>form.addEventListener('submit',async e=>{
+    e.preventDefault();const fd=new FormData(form);const productId=fd.get('product_id');
+    const payload=[{product_id:productId,quantity:Number(fd.get('quantity')),notes:String(fd.get('notes')||'')}];
+    const submit=form.querySelector('button[type="submit"]');submit.disabled=true;
+    const {data,error}=await supabase.rpc('create_salon_order',{p_tab_id:form.dataset.tab,p_items:payload,p_customer_notes:String(fd.get('customer_notes')||'')});
+    if(error){alert(error.message);submit.disabled=false;return;}
+    alert('Pedido #'+data.order_number+' adicionado à comanda. Total: '+money(data.total_cents));
+    await loadSalonOverview();
+  }));
+}
+
+async function loadDeliveryOrders(){
+  const {data:orders,error}=await supabase.from('orders')
+    .select('id,order_number,order_type,status,customer_name,customer_phone,delivery_address,payment_method,total_cents,needs_change,change_for_cents,customer_notes,cancellation_reason,created_at,order_items(id,product_name_snapshot,unit_price_cents,quantity,notes)')
+    .in('order_type',['DELIVERY','PICKUP']).order('created_at',{ascending:false}).limit(60);
+  if(error) throw error;
+  const money=c=>((Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}));
+  const cards=(orders||[]).map(o=>{
+    const items=(o.order_items||[]).map(i=>'<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?'<br><small>'+safe(i.notes)+'</small>':'')+'</li>').join('');
+    const pending=['RECEBIDO','AGUARDANDO_APROVACAO'].includes(o.status);
+    const approved=['APROVADO','ENVIADO_IMPRESSAO','IMPRESSO','FALHA_IMPRESSAO'].includes(o.status);
+    const buttons=pending?'<button class="primary" data-action="APPROVE" data-id="'+o.id+'">Aceitar pedido</button><button class="danger" data-action="REJECT" data-id="'+o.id+'">Recusar</button>':approved?'<button class="primary" data-action="DELIVER" data-id="'+o.id+'">Marcar como entregue</button>':'';
+    return '<article class="order-card"><div class="top"><strong>Pedido #'+safe(o.order_number)+' · '+(o.order_type==='PICKUP'?'Retirada':'Entrega')+'</strong><span class="pill '+(o.status==='CANCELADO'?'closed':'')+'">'+safe(o.status)+'</span></div><p><strong>'+safe(o.customer_name||'Cliente')+'</strong> · '+safe(o.customer_phone||'')+'</p><p class="muted">'+safe(o.delivery_address||'Retirada no local')+'</p><ul>'+items+'</ul><p><strong>Total: '+money(o.total_cents)+'</strong></p>'+(o.needs_change?'<p>Troco para: '+money(o.change_for_cents)+'</p>':'')+(o.customer_notes?'<p>Observação: '+safe(o.customer_notes)+'</p>':'')+(o.cancellation_reason?'<p>Motivo: '+safe(o.cancellation_reason)+'</p>':'')+'<p class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</p><div class="actions">'+buttons+'</div></article>';
+  }).join('');
+  $('roleContent').innerHTML='<div class="top"><h2>Pedidos de entrega e retirada</h2><button class="secondary" id="refreshDelivery">Atualizar</button></div><p class="muted">Esta conta só visualiza pedidos de entrega/retirada e executa as ações permitidas. Produtos, preços, salão e configurações não ficam disponíveis.</p>'+(cards||'<p class="muted">Nenhum pedido encontrado.</p>');
+  $('refreshDelivery').addEventListener('click',loadDeliveryOrders);
+  $('roleContent').querySelectorAll('[data-action]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const action=btn.dataset.action;let reason=null;
+    if(action==='REJECT'){reason=window.prompt('Informe o motivo da recusa:');if(reason===null)return;if(reason.trim().length<3){alert('Informe um motivo com pelo menos 3 caracteres.');return;}}
+    btn.disabled=true;
+    const {error}=await supabase.rpc('set_delivery_order_action',{p_order_id:btn.dataset.id,p_action:action,p_reason:reason});
+    if(error){alert(error.message);btn.disabled=false;return;}
+    await loadDeliveryOrders();
+  }));
+}
+
+async function startSession(user){
+  try{
+    const {data:role,error}=await supabase.rpc('get_my_access_role');
+    if(error) throw error;
+    if(!role) throw new Error('Esta conta ainda não possui um perfil de acesso ativo. Peça ao administrador para atribuir o perfil.');
+    showPortal();
+    $('welcomeTitle').textContent='Bem-vindo(a)';
+    $('roleLabel').textContent='Perfil identificado: '+role;
+    $('adminLink').classList.toggle('hidden',role!=='ADMIN');
+    if(role==='ADMIN'){
+      $('roleContent').innerHTML='<p>Seu perfil é de administrador. Use os atalhos abaixo para preparar os testes do salão.</p><p><a class="link primary" href="./painel-sabor-do-chef-com-delivery.html">Painel administrativo</a></p><p><a class="link secondary" href="./equipe-salao.html">Gerenciar perfis de funcionários</a></p><p><a class="link secondary" href="./qrs-salao.html">Gerar e imprimir QR Codes das mesas</a></p>';
+    }else if(role==='SALON'){
+      await loadSalonOverview();
+    }else if(role==='DELIVERY'){
+      await loadDeliveryOrders();
+    }else{
+      throw new Error('Perfil não reconhecido. Acesso bloqueado.');
+    }
+  }catch(e){await supabase.auth.signOut();showLogin();message('loginMessage',e.message||'Não foi possível validar o acesso.','error')}
+}
+$('loginForm').addEventListener('submit',async e=>{
+ e.preventDefault();message('loginMessage','Validando conta...');
+ const {data,error}=await supabase.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+ if(error){message('loginMessage','Não foi possível entrar: '+error.message,'error');return}
+ await startSession(data.user);
+});
+$('logoutBtn').addEventListener('click',async()=>{await supabase.auth.signOut();showLogin()});
+const {data:sessionData}=await supabase.auth.getSession();
+if(sessionData.session?.user) await startSession(sessionData.session.user); else showLogin();
+</script>
+</body>
+</html>
