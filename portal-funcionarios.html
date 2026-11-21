@@ -20,7 +20,7 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 .full{width:100%;margin-top:18px}.muted{color:var(--muted);font-size:13px}.message{font-size:14px;margin-top:12px}.error{color:#b00020}.success{color:#16723a}
 .hidden{display:none!important}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
-.table-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff}
+.order-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff;margin:12px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.danger{background:#fff0f0;color:#a10e18}.order-card ul{padding-left:20px}.table-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff}
 .pill{display:inline-block;border-radius:30px;padding:4px 9px;font-size:12px;font-weight:800;background:#edf7ef;color:#16723a}
 .pill.closed{background:#f1f2f5;color:#626875}
 .notice{padding:14px;border:1px solid #f0d99b;background:#fff9e9;border-radius:12px;margin-top:14px}
@@ -72,6 +72,32 @@ async function loadSalonOverview(){
   }).join('');
   $('roleContent').innerHTML='<h2 style="margin-top:20px">Visão das mesas</h2><p class="muted">Esta primeira versão permite conferir as mesas e identificar comandas abertas. Abertura de comanda, lançamento de itens, fechamento e impressão serão liberados após concluir e testar as permissões de pedidos.</p><div class="grid">'+(list||'<p>Nenhuma mesa encontrada.</p>')+'</div>';
 }
+
+async function loadDeliveryOrders(){
+  const {data:orders,error}=await supabase.from('orders')
+    .select('id,order_number,order_type,status,customer_name,customer_phone,delivery_address,payment_method,total_cents,needs_change,change_for_cents,customer_notes,cancellation_reason,created_at,order_items(id,product_name_snapshot,unit_price_cents,quantity,notes)')
+    .in('order_type',['DELIVERY','PICKUP']).order('created_at',{ascending:false}).limit(60);
+  if(error) throw error;
+  const money=c=>((Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}));
+  const cards=(orders||[]).map(o=>{
+    const items=(o.order_items||[]).map(i=>'<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?'<br><small>'+safe(i.notes)+'</small>':'')+'</li>').join('');
+    const pending=['RECEBIDO','AGUARDANDO_APROVACAO'].includes(o.status);
+    const approved=['APROVADO','ENVIADO_IMPRESSAO','IMPRESSO','FALHA_IMPRESSAO'].includes(o.status);
+    const buttons=pending?'<button class="primary" data-action="APPROVE" data-id="'+o.id+'">Aceitar pedido</button><button class="danger" data-action="REJECT" data-id="'+o.id+'">Recusar</button>':approved?'<button class="primary" data-action="DELIVER" data-id="'+o.id+'">Marcar como entregue</button>':'';
+    return '<article class="order-card"><div class="top"><strong>Pedido #'+safe(o.order_number)+' · '+(o.order_type==='PICKUP'?'Retirada':'Entrega')+'</strong><span class="pill '+(o.status==='CANCELADO'?'closed':'')+'">'+safe(o.status)+'</span></div><p><strong>'+safe(o.customer_name||'Cliente')+'</strong> · '+safe(o.customer_phone||'')+'</p><p class="muted">'+safe(o.delivery_address||'Retirada no local')+'</p><ul>'+items+'</ul><p><strong>Total: '+money(o.total_cents)+'</strong></p>'+(o.needs_change?'<p>Troco para: '+money(o.change_for_cents)+'</p>':'')+(o.customer_notes?'<p>Observação: '+safe(o.customer_notes)+'</p>':'')+(o.cancellation_reason?'<p>Motivo: '+safe(o.cancellation_reason)+'</p>':'')+'<p class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</p><div class="actions">'+buttons+'</div></article>';
+  }).join('');
+  $('roleContent').innerHTML='<div class="top"><h2>Pedidos de entrega e retirada</h2><button class="secondary" id="refreshDelivery">Atualizar</button></div><p class="muted">Esta conta só visualiza pedidos de entrega/retirada e executa as ações permitidas. Produtos, preços, salão e configurações não ficam disponíveis.</p>'+(cards||'<p class="muted">Nenhum pedido encontrado.</p>');
+  $('refreshDelivery').addEventListener('click',loadDeliveryOrders);
+  $('roleContent').querySelectorAll('[data-action]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const action=btn.dataset.action;let reason=null;
+    if(action==='REJECT'){reason=window.prompt('Informe o motivo da recusa:');if(reason===null)return;if(reason.trim().length<3){alert('Informe um motivo com pelo menos 3 caracteres.');return;}}
+    btn.disabled=true;
+    const {error}=await supabase.rpc('set_delivery_order_action',{p_order_id:btn.dataset.id,p_action:action,p_reason:reason});
+    if(error){alert(error.message);btn.disabled=false;return;}
+    await loadDeliveryOrders();
+  }));
+}
+
 async function startSession(user){
   try{
     const {data:role,error}=await supabase.rpc('get_my_access_role');
@@ -86,7 +112,7 @@ async function startSession(user){
     }else if(role==='SALON'){
       await loadSalonOverview();
     }else if(role==='DELIVERY'){
-      $('roleContent').innerHTML='<h2>Área de entrega</h2><div class="notice"><strong>Acesso reconhecido.</strong><p class="muted">O perfil de entrega já é identificado com segurança. A lista e as ações de pedidos serão ativadas depois da implantação das políticas específicas de leitura e atualização para DELIVERY/PICKUP. Até lá, esta tela não permite alterar pedidos.</p></div>';
+      await loadDeliveryOrders();
     }else{
       throw new Error('Perfil não reconhecido. Acesso bloqueado.');
     }
