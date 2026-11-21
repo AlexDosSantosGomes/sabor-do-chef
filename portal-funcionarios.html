@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#b5121b">
+<title>Sabor do Chef | Acesso de funcionários</title>
+<style>
+:root{--red:#b5121b;--dark:#850d14;--bg:#f4f5f7;--text:#252832;--muted:#737985;--border:#e7e9ee}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+header{background:linear-gradient(115deg,#710b12,#b5121b 65%,#cf2931);color:#fff;padding:18px max(18px,calc((100% - 1080px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px}
+header h1{font-size:21px;margin:0;font-weight:850}header small{opacity:.88}
+main{width:min(1080px,calc(100% - 28px));margin:28px auto}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 8px 28px #2026380a;margin-bottom:16px}
+.login{max-width:430px;margin:64px auto}.brand{text-align:center;color:var(--red);font-size:27px;font-weight:900;margin-bottom:20px}
+h2{font-size:19px;margin:0 0 14px}label{display:block;font-size:13px;font-weight:750;margin:14px 0 6px}
+input{width:100%;padding:13px;border:1px solid #dfe2e8;border-radius:10px;font:inherit}
+button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;font-weight:800;text-decoration:none;cursor:pointer}
+.primary{background:var(--red);color:#fff}.secondary{background:#f1f2f5;color:#343944}
+.full{width:100%;margin-top:18px}.muted{color:var(--muted);font-size:13px}.message{font-size:14px;margin-top:12px}.error{color:#b00020}.success{color:#16723a}
+.hidden{display:none!important}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.table-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff}
+.pill{display:inline-block;border-radius:30px;padding:4px 9px;font-size:12px;font-weight:800;background:#edf7ef;color:#16723a}
+.pill.closed{background:#f1f2f5;color:#626875}
+.notice{padding:14px;border:1px solid #f0d99b;background:#fff9e9;border-radius:12px;margin-top:14px}
+@media(max-width:600px){main{margin:16px auto}.card{padding:17px}.login{margin:32px auto}}
+</style>
+</head>
+<body>
+<header><div><h1>Sabor do Chef</h1><small>Portal de funcionários</small></div><button id="logoutBtn" class="secondary hidden" type="button">Sair</button></header>
+<main>
+<section id="loginScreen" class="card login">
+<div class="brand">Sabor do Chef</div>
+<h2>Entrar como funcionário</h2>
+<p class="muted">Use o e-mail e a senha cadastrados para sua conta de acesso.</p>
+<form id="loginForm">
+<label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required placeholder="Seu e-mail">
+<label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" required placeholder="Sua senha">
+<button class="primary full" type="submit">Entrar</button>
+<div id="loginMessage" class="message" aria-live="polite"></div>
+</form>
+</section>
+<section id="portalScreen" class="hidden">
+<div class="card">
+<div class="top"><div><h2 id="welcomeTitle">Área do funcionário</h2><div id="roleLabel" class="muted"></div></div><a class="link secondary" href="./painel-sabor-do-chef-com-delivery.html" id="adminLink">Painel administrativo</a></div>
+<div id="roleContent"></div>
+<div id="portalMessage" class="message" aria-live="polite"></div>
+</div>
+</section>
+</main>
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
+const $=id=>document.getElementById(id);
+function message(id,text,type=''){const el=$(id);el.textContent=text;el.className='message '+type}
+function showLogin(){ $('loginScreen').classList.remove('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
+function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
+function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function loadSalonOverview(){
+  $('roleContent').innerHTML='<p class="muted">Carregando mesas e comandas...</p>';
+  const [{data:tables,error:tableError},{data:tabs,error:tabError}]=await Promise.all([
+    supabase.from('restaurant_tables').select('*').order('created_at',{ascending:true}),
+    supabase.from('dining_tabs').select('*').eq('status','OPEN').order('opened_at',{ascending:false})
+  ]);
+  if(tableError) throw tableError;if(tabError) throw tabError;
+  const openByTable=new Map((tabs||[]).map(t=>[t.table_id,t]));
+  const list=(tables||[]).map((t,i)=>{
+    const id=t.id;const label=t.name||t.table_number||t.number||('Mesa '+(i+1));const tab=openByTable.get(id);
+    const active=t.is_active!==false&&t.active!==false;
+    return '<article class="table-card"><div class="top"><strong>'+safe(label)+'</strong><span class="pill '+(tab?'':'closed')+'">'+(tab?'Comanda aberta':'Sem comanda aberta')+'</span></div><p class="muted">'+(active?'Mesa ativa':'Mesa desativada')+'</p></article>';
+  }).join('');
+  $('roleContent').innerHTML='<h2 style="margin-top:20px">Visão das mesas</h2><p class="muted">Esta primeira versão permite conferir as mesas e identificar comandas abertas. Abertura de comanda, lançamento de itens, fechamento e impressão serão liberados após concluir e testar as permissões de pedidos.</p><div class="grid">'+(list||'<p>Nenhuma mesa encontrada.</p>')+'</div>';
+}
+async function startSession(user){
+  try{
+    const {data:role,error}=await supabase.rpc('get_my_access_role');
+    if(error) throw error;
+    if(!role) throw new Error('Esta conta ainda não possui um perfil de acesso ativo. Peça ao administrador para atribuir o perfil.');
+    showPortal();
+    $('welcomeTitle').textContent='Bem-vindo(a)';
+    $('roleLabel').textContent='Perfil identificado: '+role;
+    $('adminLink').classList.toggle('hidden',role!=='ADMIN');
+    if(role==='ADMIN'){
+      $('roleContent').innerHTML='<p>Seu perfil é de administrador. Use o painel completo para gerenciar o sistema.</p><a class="link primary" href="./painel-sabor-do-chef-com-delivery.html">Abrir painel administrativo</a>';
+    }else if(role==='SALON'){
+      await loadSalonOverview();
+    }else if(role==='DELIVERY'){
+      $('roleContent').innerHTML='<h2>Área de entrega</h2><div class="notice"><strong>Acesso reconhecido.</strong><p class="muted">O perfil de entrega já é identificado com segurança. A lista e as ações de pedidos serão ativadas depois da implantação das políticas específicas de leitura e atualização para DELIVERY/PICKUP. Até lá, esta tela não permite alterar pedidos.</p></div>';
+    }else{
+      throw new Error('Perfil não reconhecido. Acesso bloqueado.');
+    }
+  }catch(e){await supabase.auth.signOut();showLogin();message('loginMessage',e.message||'Não foi possível validar o acesso.','error')}
+}
+$('loginForm').addEventListener('submit',async e=>{
+ e.preventDefault();message('loginMessage','Validando conta...');
+ const {data,error}=await supabase.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+ if(error){message('loginMessage','Não foi possível entrar: '+error.message,'error');return}
+ await startSession(data.user);
+});
+$('logoutBtn').addEventListener('click',async()=>{await supabase.auth.signOut();showLogin()});
+const {data:sessionData}=await supabase.auth.getSession();
+if(sessionData.session?.user) await startSession(sessionData.session.user); else showLogin();
+</script>
+</body>
+</html>
