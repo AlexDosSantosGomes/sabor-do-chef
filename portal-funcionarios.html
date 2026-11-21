@@ -60,8 +60,8 @@ function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;
 async function loadSalonOverview(){
   $('roleContent').innerHTML='<p class="muted">Carregando mesas e comandas...</p>';
   const [{data:tables,error:tableError},{data:tabs,error:tabError}]=await Promise.all([
-    supabase.from('restaurant_tables').select('*').order('created_at',{ascending:true}),
-    supabase.from('dining_tabs').select('*').eq('status','OPEN').order('opened_at',{ascending:false})
+    supabase.from('restaurant_tables').select('*'),
+    supabase.from('dining_tabs').select('*').eq('status','OPEN')
   ]);
   if(tableError) throw tableError;if(tabError) throw tabError;
   const openByTable=new Map((tabs||[]).map(t=>[t.table_id,t]));
