@@ -59,7 +59,8 @@ Deno.serve(async (req: Request) => {
 
     let invitedUser = null;
     const { data: invited, error: inviteError } = await db.auth.admin.inviteUserByEmail(email, {
-      data: { display_name: displayName }
+      data: { display_name: displayName },
+      redirectTo: "https://cardapiosabordochef.com.br/portal-funcionarios.html"
     });
     invitedUser = invited.user;
     if (inviteError || !invitedUser) {
