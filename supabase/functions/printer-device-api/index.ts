@@ -124,7 +124,7 @@ Deno.serve(async (req: Request) => {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: candidate, error } = await db.from("print_jobs")
-        .select("id, order_id, attempt_count")
+        .select("id, order_id, dining_tab_id, job_type, attempt_count")
         .eq("status", "PENDENTE")
         .lte("next_attempt_at", nowIso)
         .order("next_attempt_at", { ascending: true })
@@ -146,10 +146,39 @@ Deno.serve(async (req: Request) => {
         })
         .eq("id", candidate.id)
         .eq("status", "PENDENTE")
-        .select("id, order_id, attempt_count")
+        .select("id, order_id, dining_tab_id, job_type, attempt_count")
         .maybeSingle();
       if (claimError) return reply({ error: "Não foi possível reservar o pedido." }, 500);
       if (!claimed) continue;
+
+      if (claimed.job_type === "TAB_CLOSE") {
+        const { data: tab, error: tabError } = await db.from("dining_tabs")
+          .select("id, table_id, paid_total_cents, payment_method, closed_at")
+          .eq("id", claimed.dining_tab_id).maybeSingle();
+        if (tabError || !tab) return reply({ error: "Comanda fechada não encontrada." }, 500);
+        const { data: table, error: tableError } = await db.from("restaurant_tables")
+          .select("table_number").eq("id", tab.table_id).maybeSingle();
+        if (tableError || !table) return reply({ error: "Mesa não encontrada." }, 500);
+        const { data: orders, error: ordersError } = await db.from("orders")
+          .select("id, order_number, total_cents, customer_notes, created_at")
+          .eq("dining_tab_id", tab.id).neq("status", "CANCELADO").order("created_at", { ascending: true });
+        if (ordersError) return reply({ error: "Não foi possível carregar os pedidos da comanda." }, 500);
+        const orderIds = (orders ?? []).map((o: { id: string }) => o.id);
+        const { data: items, error: itemsError } = orderIds.length
+          ? await db.from("order_items").select("id, order_id, product_name_snapshot, unit_price_cents, quantity, notes").in("order_id", orderIds)
+          : { data: [], error: null };
+        if (itemsError) return reply({ error: "Não foi possível carregar os itens da comanda." }, 500);
+        const itemIds = (items ?? []).map((i: { id: string }) => i.id);
+        const { data: accompaniments, error: accError } = itemIds.length
+          ? await db.from("order_item_accompaniments").select("order_item_id, accompaniment_name, unit_index").in("order_item_id", itemIds)
+          : { data: [], error: null };
+        if (accError) return reply({ error: "Não foi possível carregar os acompanhamentos." }, 500);
+        const order = { order_type: "TAB_CLOSE", table_number: table.table_number,
+          total_cents: tab.paid_total_cents ?? 0, payment_method: tab.payment_method,
+          created_at: tab.closed_at, order_count: orders?.length ?? 0 };
+        return reply({ job: { id: claimed.id, job_type: "TAB_CLOSE", attempt_count: claimed.attempt_count,
+          order, orders: orders ?? [], items: items ?? [], accompaniments: accompaniments ?? [] } });
+      }
 
       await db.from("orders").update({ status: "ENVIADO_IMPRESSAO" })
         .eq("id", claimed.order_id)
@@ -235,7 +264,7 @@ Deno.serve(async (req: Request) => {
         .select("id").maybeSingle();
       if (error) return reply({ error: "Não foi possível confirmar o envio à impressora." }, 500);
       if (!data) return reply({ error: "Tarefa já alterada; atualize o painel." }, 409);
-      await db.from("orders").update({ status: "IMPRESSO" })
+      if (current.order_id) await db.from("orders").update({ status: "IMPRESSO" })
         .eq("id", current.order_id)
         .in("status", ["APROVADO", "ENVIADO_IMPRESSAO", "FALHA_IMPRESSAO"]);
       return reply({ ok: true });
@@ -258,7 +287,7 @@ Deno.serve(async (req: Request) => {
       last_error: message
     }).eq("id", body.job_id).eq("device_id", device.id).eq("status", "PROCESSANDO");
     if (error) return reply({ error: "Não foi possível reagendar a impressão." }, 500);
-    await db.from("orders").update({ status: "FALHA_IMPRESSAO" })
+    if (current.order_id) await db.from("orders").update({ status: "FALHA_IMPRESSAO" })
       .eq("id", current.order_id)
       .in("status", ["APROVADO", "ENVIADO_IMPRESSAO", "IMPRESSO", "FALHA_IMPRESSAO"]);
     return reply({ ok: true, retry_in_seconds: delaySeconds });
