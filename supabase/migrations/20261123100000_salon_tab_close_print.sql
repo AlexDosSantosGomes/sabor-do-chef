@@ -11,12 +11,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS print_jobs_tab_close_unique ON public.print_jo
 CREATE INDEX IF NOT EXISTS print_jobs_pending_queue_idx ON public.print_jobs(status,next_attempt_at,created_at);
 
 CREATE OR REPLACE FUNCTION public.notify_printer_queue_realtime()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $trigger$\nBEGIN
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $trigger$
+BEGIN
   IF NEW.status='PENDENTE' AND (TG_OP='INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
     PERFORM realtime.send('{}'::jsonb,'queue_changed','printer-queue',false);
   END IF;
   RETURN NEW;
-END;\n$trigger$;\nDROP TRIGGER IF EXISTS print_jobs_realtime_wakeup ON public.print_jobs;
+END;
+$trigger$;\nDROP TRIGGER IF EXISTS print_jobs_realtime_wakeup ON public.print_jobs;
 CREATE TRIGGER print_jobs_realtime_wakeup
 AFTER INSERT OR UPDATE OF status ON public.print_jobs
 FOR EACH ROW EXECUTE FUNCTION public.notify_printer_queue_realtime();
