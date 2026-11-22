@@ -66,8 +66,27 @@ Deno.serve(async (req: Request) => {
     if (inviteError || !invitedUser) {
       const { data: list } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
       const existing = list?.users?.find((u) => u.email?.toLowerCase() === email);
-      if (!existing) return reply({ error: inviteError?.message ?? "Não foi possível convidar este e-mail." }, 400);
-      invitedUser = existing;
+      if (existing) {
+        invitedUser = existing;
+      } else if (/rate limit|email rate limit/i.test(inviteError?.message ?? "")) {
+        // Register the employee even while Auth email delivery is rate-limited.
+        // Password setup can be completed later through the portal recovery flow.
+        const bytes = new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        const temporaryPassword = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("") + "aA1!";
+        const { data: created, error: createError } = await db.auth.admin.createUser({
+          email,
+          password: temporaryPassword,
+          email_confirm: true,
+          user_metadata: { display_name: displayName }
+        });
+        if (createError || !created.user) {
+          return reply({ error: createError?.message ?? inviteError?.message ?? "Não foi possível criar a conta." }, 400);
+        }
+        invitedUser = created.user;
+      } else {
+        return reply({ error: inviteError?.message ?? "Não foi possível convidar este e-mail." }, 400);
+      }
     }
 
     const { error: roleError } = await db.from("user_roles").upsert({
@@ -82,27 +101,23 @@ Deno.serve(async (req: Request) => {
   }
 
   if (body.action === "generate_password_link") {
-    if (!body.user_id) return reply({ error: "Funcionário não informado." }, 400);
+    const userId = String(body.user_id ?? "");
+    if (!userId) return reply({ error: "Funcionário não informado." }, 400);
     const { data: staffRole, error: staffRoleError } = await db.from("user_roles")
-      .select("user_id,is_active").eq("user_id", body.user_id).maybeSingle();
+      .select("user_id,is_active").eq("user_id", userId).maybeSingle();
     if (staffRoleError || !staffRole) return reply({ error: "Funcionário não encontrado." }, 404);
-    if (staffRole.is_active !== true) return reply({ error: "Ative o funcionário antes de gerar um link de senha." }, 400);
-
-    const { data: staffUser, error: staffUserError } = await db.auth.admin.getUserById(body.user_id);
-    const email = staffUser?.user?.email;
-    if (staffUserError || !email) return reply({ error: "Não foi possível localizar o e-mail do funcionário." }, 404);
-    const linkType = staffUser.user.email_confirmed_at ? "recovery" : "invite";
-
-    const { data: generated, error: generateError } = await db.auth.admin.generateLink({
-      type: linkType,
-      email,
+    if (staffRole.is_active !== true) return reply({ error: "Ative o funcionário antes de gerar o link." }, 400);
+    const { data: staffData, error: staffError } = await db.auth.admin.getUserById(userId);
+    if (staffError || !staffData.user?.email) return reply({ error: "Não foi possível localizar o e-mail do funcionário." }, 404);
+    const { data: linkData, error: linkError } = await db.auth.admin.generateLink({
+      type: "recovery",
+      email: staffData.user.email,
       options: { redirectTo: "https://cardapiosabordochef.com.br/portal-funcionarios.html" }
     });
-    const actionLink = generated?.properties?.action_link;
-    if (generateError || !actionLink) {
-      return reply({ error: generateError?.message ?? "Não foi possível gerar o link de senha." }, 400);
+    if (linkError || !linkData.properties?.action_link) {
+      return reply({ error: linkError?.message ?? "Não foi possível gerar o link de senha." }, 400);
     }
-    return reply({ ok: true, user_id: body.user_id, email, action_link: actionLink });
+    return reply({ ok: true, email: staffData.user.email, action_link: linkData.properties.action_link });
   }
 
   if (body.action === "set_active") {
