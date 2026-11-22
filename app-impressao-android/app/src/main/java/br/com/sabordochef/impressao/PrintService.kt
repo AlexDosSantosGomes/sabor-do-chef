@@ -25,6 +25,7 @@ class PrintService : Service() {
     @Volatile private var running = false
     private var worker: Thread? = null
     private var cpuWakeLock: PowerManager.WakeLock? = null
+    private var realtimeListener: RealtimePrintListener? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -41,6 +42,8 @@ class PrintService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!running) {
             running = true
+            realtimeListener = RealtimePrintListener { updateNotification("Realtime recebeu aviso — verificando fila") }
+            realtimeListener?.connect()
             worker = thread(name = "sabor-print-queue") { pollQueue() }
         }
         return START_STICKY
@@ -49,6 +52,8 @@ class PrintService : Service() {
     override fun onDestroy() {
         running = false
         worker?.interrupt()
+        realtimeListener?.close()
+        realtimeListener = null
         cpuWakeLock?.let { if (it.isHeld) it.release() }
         cpuWakeLock = null
         super.onDestroy()
@@ -80,7 +85,7 @@ class PrintService : Service() {
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
-                    Thread.sleep(25000)
+                    realtimeListener?.awaitSignal(25000) ?: Thread.sleep(25000)
                     continue
                 }
 
