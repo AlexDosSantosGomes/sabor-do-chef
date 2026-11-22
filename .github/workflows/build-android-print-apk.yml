@@ -7,6 +7,7 @@ on:
       - main
       - atualizacao/fila-impressao-ptbr-v0-2
       - feature/modulo-salao
+      - fix/realtime-wakeup-recovery
     paths:
       - "app-impressao-android/**"
       - ".github/workflows/build-android-print-apk.yml"
