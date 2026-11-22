@@ -89,7 +89,7 @@ Deno.serve(async (req: Request) => {
     if (staffRole.is_active !== true) return reply({ error: "Ative o funcionário antes de gerar um link de senha." }, 400);
 
     const { data: staffUser, error: staffUserError } = await db.auth.admin.getUserById(body.user_id);
-    const email = staffUser.user?.email;
+    const email = staffUser?.user?.email;
     if (staffUserError || !email) return reply({ error: "Não foi possível localizar o e-mail do funcionário." }, 404);
 
     const { data: generated, error: generateError } = await db.auth.admin.generateLink({
