@@ -48,12 +48,14 @@ class RealtimePrintListener(
     private fun reconnectLoop() {
         var delayMs = 1000L
         while (active) {
+            var heartbeat: Thread? = null
             try {
                 val request = Request.Builder()
                     .url("$REALTIME_URL?apikey=$PUBLISHABLE_KEY&vsn=1.0.0")
                     .build()
-                val latch = java.util.concurrent.CountDownLatch(1)
-                val connected = java.util.concurrent.atomic.AtomicBoolean(false)
+                val joined = java.util.concurrent.CountDownLatch(1)
+                val closed = java.util.concurrent.CountDownLatch(1)
+                val joinOk = java.util.concurrent.atomic.AtomicBoolean(false)
                 val ws = client.newWebSocket(request, object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         socket = webSocket
@@ -74,59 +76,66 @@ class RealtimePrintListener(
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         try {
                             val message = JSONObject(text)
-                            if (message.optString("event") == "phx_reply") {
-                                val status = message.optJSONObject("payload")?.optString("status")
-                                if (status == "ok" && !connected.getAndSet(true)) {
-                                    delayMs = 1000L
-                                    signal() // reconcile queue immediately after every reconnect
-                                    latch.countDown()
+                            when (message.optString("event")) {
+                                "phx_reply" -> {
+                                    val status = message.optJSONObject("payload")?.optString("status")
+                                    if (status == "ok" && !joinOk.getAndSet(true)) {
+                                        joined.countDown()
+                                        delayMs = 1000L
+                                        signal()
+                                    } else if (status == "error") closed.countDown()
                                 }
-                            } else if (message.optString("event") == "broadcast") {
-                                val payload = message.optJSONObject("payload")
-                                if (payload?.optString("event") == "queue_changed") signal()
-                            } else if (message.optString("event") == "phx_error" ||
-                                message.optString("event") == "phx_close") {
-                                latch.countDown()
+                                "broadcast" -> {
+                                    val payload = message.optJSONObject("payload")
+                                    if (payload?.optString("event") == "queue_changed") signal()
+                                }
+                                "phx_error", "phx_close" -> closed.countDown()
                             }
                         } catch (_: Exception) { }
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                        latch.countDown()
+                        joined.countDown()
+                        closed.countDown()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                        latch.countDown()
+                        joined.countDown()
+                        closed.countDown()
                     }
                 })
                 socket = ws
 
-                // Phoenix heartbeat keeps the Realtime channel alive during long idle periods.
-                val heartbeat = thread(name = "sabor-realtime-heartbeat") {
-                    var ref = 2
-                    while (active && !latch.await(25, TimeUnit.SECONDS)) {
-                        val current = socket ?: break
-                        val frame = JSONObject()
-                            .put("topic", "phoenix")
-                            .put("event", "heartbeat")
-                            .put("payload", JSONObject())
-                            .put("ref", (ref++).toString())
-                        if (!current.send(frame.toString())) break
+                if (!joined.await(20, TimeUnit.SECONDS) || !joinOk.get()) {
+                    ws.cancel()
+                    closed.countDown()
+                } else {
+                    heartbeat = thread(name = "sabor-realtime-heartbeat") {
+                        var ref = 2
+                        while (active && closed.count > 0) {
+                            try { Thread.sleep(25000) } catch (_: InterruptedException) { break }
+                            val current = socket ?: break
+                            val frame = JSONObject()
+                                .put("topic", "phoenix")
+                                .put("event", "heartbeat")
+                                .put("payload", JSONObject())
+                                .put("ref", (ref++).toString())
+                            if (!current.send(frame.toString())) break
+                        }
                     }
+                    closed.await()
                 }
-
-                latch.await(70, TimeUnit.SECONDS)
                 try { ws.close(1000, "reconnect") } catch (_: Exception) { }
-                try { heartbeat.interrupt() } catch (_: Exception) { }
-                if (active) Thread.sleep(delayMs)
             } catch (_: InterruptedException) {
                 break
             } catch (_: Exception) {
-                if (active) try { Thread.sleep(delayMs) } catch (_: InterruptedException) { break }
+                // The normal queue polling remains active while Realtime reconnects.
             } finally {
+                try { heartbeat?.interrupt() } catch (_: Exception) { }
                 socket = null
                 delayMs = (delayMs * 2).coerceAtMost(60000L)
             }
+            if (active) try { Thread.sleep(delayMs) } catch (_: InterruptedException) { break }
         }
     }
 
