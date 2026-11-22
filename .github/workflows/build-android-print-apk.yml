@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - atualizacao/fila-impressao-ptbr-v0-2
+      - feature/modulo-salao
     paths:
       - "app-impressao-android/**"
       - ".github/workflows/build-android-print-apk.yml"
@@ -50,7 +51,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: sabor-do-chef-impressao-v0.3.0
+          name: sabor-do-chef-impressao-v0.4.0
           path: app-impressao-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
