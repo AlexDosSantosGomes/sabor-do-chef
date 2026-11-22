@@ -13,7 +13,7 @@ main{max-width:850px;margin:18px auto;padding:0 13px}.card{background:white;bord
 button,select,input,textarea{font:inherit}button{border:0;border-radius:10px;padding:10px 14px;background:var(--red);color:white;font-weight:800;cursor:pointer}button:disabled{opacity:.45}select,input,textarea{width:100%;padding:11px;border:1px solid #d7d9df;border-radius:9px;background:white}label{display:block;font-size:13px;font-weight:750;margin:12px 0 5px}
 .cart-row{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}.cart-row button{padding:5px 10px}.cart-row .minor{background:#f0f1f4;color:#333}.unit-detail{font-size:12px;color:var(--muted);margin-top:3px}.total{font-size:21px;font-weight:900;text-align:right;margin:14px 0}.hidden{display:none!important}
 .modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}.modal-card{background:white;width:min(100%,440px);max-height:85vh;overflow:auto;border-radius:17px;padding:20px}.accomp-list{display:grid;gap:9px}.accomp-option{display:flex;align-items:center;gap:10px;border:1px solid var(--line);padding:11px;border-radius:10px;margin:0}.accomp-option input{width:18px;height:18px;flex:none}.modal-actions{display:flex;gap:9px;margin-top:18px}.modal-actions button{flex:1}.secondary{background:#eff0f3;color:#333}
-footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
+ #tableTitle{font-size:30px;font-weight:950;color:var(--red);letter-spacing:-.6px}#cartFeedback{min-height:18px;color:#16723a;font-size:13px;margin:4px 0 10px}footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 @media(max-width:520px){main{margin:13px auto}.card{padding:14px}.products{grid-template-columns:1fr}.product img{width:76px;height:76px}}
 </style>
 </head>
@@ -22,7 +22,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <main>
 <section class="card"><h2 id="tableTitle">Carregando mesa...</h2><p id="tableMessage" class="muted">Validando QR Code.</p><div id="closedNotice" class="notice hidden">Esta mesa ainda não está recebendo pedidos. Chame um funcionário para abrir a comanda.</div></section>
 <section id="menuSection" class="card hidden"><h2>Cardápio</h2><label for="categoryFilter">Categoria</label><select id="categoryFilter"><option value="">Todas as categorias</option></select><div id="products" class="products"></div></section>
-<section id="cartSection" class="card hidden"><h2>Seu pedido</h2><div id="cart"></div><label for="notes">Observação para a equipe (opcional)</label><textarea id="notes" rows="2" maxlength="300" placeholder="Alguma orientação?"></textarea><div id="total" class="total">R$ 0,00</div><button id="sendOrder" style="width:100%">Enviar pedido para a mesa</button><p class="muted">O pagamento será feito na saída, junto com a conta da mesa.</p></section>
+<section id="cartSection" class="card hidden"><h2 id="cartHeading">Seu pedido (0 itens)</h2><p id="cartFeedback" aria-live="polite"></p><div id="cart"></div><label for="notes">Observação para a equipe (opcional)</label><textarea id="notes" rows="2" maxlength="300" placeholder="Alguma orientação?"></textarea><div id="total" class="total">R$ 0,00</div><button id="sendOrder" style="width:100%">Enviar pedido para a mesa</button><p class="muted">O pagamento será feito na saída, junto com a conta da mesa.</p></section>
 <section id="success" class="card hidden"><h2>Pedido enviado!</h2><p id="successText"></p><p class="muted">Seu pedido foi adicionado à comanda da mesa. Você pode continuar escolhendo outros itens.</p><button id="continue" style="width:100%">Continuar escolhendo</button></section>
 </main>
 <div id="accompModal" class="modal hidden"><div class="modal-card"><h2 id="accompTitle">Escolha os acompanhamentos</h2><p class="muted">Opcional · Escolha até 2 por quentinha, sem custo adicional.</p><div id="accompOptions" class="accomp-list"></div><div class="modal-actions"><button id="accompCancel" class="secondary" type="button">Cancelar</button><button id="accompConfirm" type="button">Adicionar ao pedido</button></div></div></div>
@@ -72,10 +72,10 @@ function addProduct(id){
 function closeModal(){$('accompModal').classList.add('hidden');pendingProduct=null}
 $('accompCancel').addEventListener('click',closeModal);
 $('accompConfirm').addEventListener('click',()=>{if(!pendingProduct)return;const selected=[...$('accompOptions').querySelectorAll('input:checked')].map(x=>x.value);addUnit(pendingProduct,selected);closeModal()});
-function addUnit(p,selected){const x=cart.get(p.id)||{product:p,units:[]};x.units.push([...selected]);cart.set(p.id,x);renderCart()}
+function addUnit(p,selected){const x=cart.get(p.id)||{product:p,units:[]};x.units.push([...selected]);cart.set(p.id,x);$('cartFeedback').textContent=p.name+' adicionado ao carrinho.';renderCart()}
 function changeQty(id,delta){const x=cart.get(id);if(!x)return;if(delta>0){addProduct(id);return;}x.units.pop();if(!x.units.length)cart.delete(id);renderCart()}
 function renderCart(){
- const rows=[...cart.values()];$('cartSection').classList.toggle('hidden',rows.length===0);
+ const rows=[...cart.values()];$('cartSection').classList.toggle('hidden',rows.length===0);const itemCount=rows.reduce((n,x)=>n+x.units.length,0);$('cartHeading').textContent='Seu pedido ('+itemCount+' '+(itemCount===1?'item':'itens')+')';
  $('cart').innerHTML=rows.map(x=>'<div class="cart-row"><div><strong>'+esc(x.product.name)+'</strong><div class="muted">'+money(x.product.price_cents*x.units.length)+'</div>'+(isQuentinha(x.product)?x.units.map((s,i)=>s.length?'<div class="unit-detail">Quentinha '+(i+1)+': '+s.map(esc).join(', ')+'</div>':'').join(''):'')+'</div><div><button class="minor" data-minus="'+x.product.id+'">−</button> '+x.units.length+' <button data-plus="'+x.product.id+'">+</button></div></div>').join('');
  const total=rows.reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0);$('total').textContent=money(total);
  $('cart').querySelectorAll('[data-minus]').forEach(b=>b.addEventListener('click',()=>changeQty(b.dataset.minus,-1)));
