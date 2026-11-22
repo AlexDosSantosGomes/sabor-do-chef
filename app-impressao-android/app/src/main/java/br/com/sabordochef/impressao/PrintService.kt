@@ -85,7 +85,7 @@ class PrintService : Service() {
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
-                    realtimeListener?.awaitSignal(25000) ?: Thread.sleep(25000)
+                    realtimeListener?.awaitSignal()
                     continue
                 }
 
