@@ -269,11 +269,19 @@ class PrintService : Service() {
             ?: "Data e horário não disponíveis"
         val notes = order.optString("customer_notes").takeUnless { it == "null" }.orEmpty()
 
+        // A identificação da mesa recebe alinhamento centralizado e fonte dupla ESC/POS.
+        val out = java.io.ByteArrayOutputStream()
+        out.write(PrinterText.initialize())
+        out.write(byteArrayOf(0x1B, 0x61, 0x01)) // center
+        out.write(PrinterText.encode("SABOR DO CHEF\n"))
+        out.write(byteArrayOf(0x1D, 0x21, 0x11)) // double width + double height
+        out.write(PrinterText.encode("MESA $tableNumber\n"))
+        out.write(byteArrayOf(0x1D, 0x21, 0x00)) // normal size
+        out.write(PrinterText.encode("PEDIDO DO SALÃO\n"))
+        out.write(byteArrayOf(0x1B, 0x61, 0x00)) // left
+
         val ticket = buildString {
-            append("SABOR DO CHEF\n")
-            append("PEDIDO DO SALÃO\n")
             append("================================\n")
-            append("MESA ").append(tableNumber).append("\n")
             append("PEDIDO Nº ").append(number).append("\n")
             append("DATA/HORA: ").append(dateTime).append("\n")
             if (notes.isNotBlank()) append("OBSERVAÇÃO: ").append(notes).append("\n")
@@ -296,13 +304,11 @@ class PrintService : Service() {
             append("PAGAMENTO NA SAÍDA\n")
             append("--------------------------------\n\n\n")
         }
-
-        val copy = PrinterText.encode(ticket)
-        val cut = byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
-        val out = java.io.ByteArrayOutputStream()
-        out.write(PrinterText.initialize())
-        out.write(copy)
-        out.write(cut)
+        out.write(PrinterText.encode(ticket))
+        out.write(byteArrayOf(0x1B, 0x61, 0x01))
+        out.write(PrinterText.encode("SABOR DO CHEF\n"))
+        out.write(byteArrayOf(0x1B, 0x61, 0x00))
+        out.write(byteArrayOf(0x1D, 0x56, 0x00)) // cut
         return out.toByteArray()
     }
 
