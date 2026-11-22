@@ -81,6 +81,29 @@ Deno.serve(async (req: Request) => {
     return reply({ ok: true, user_id: invitedUser.id, email, role, invited: !inviteError });
   }
 
+  if (body.action === "generate_password_link") {
+    if (!body.user_id) return reply({ error: "Funcionário não informado." }, 400);
+    const { data: staffRole, error: staffRoleError } = await db.from("user_roles")
+      .select("user_id,is_active").eq("user_id", body.user_id).maybeSingle();
+    if (staffRoleError || !staffRole) return reply({ error: "Funcionário não encontrado." }, 404);
+    if (staffRole.is_active !== true) return reply({ error: "Ative o funcionário antes de gerar um link de senha." }, 400);
+
+    const { data: staffUser, error: staffUserError } = await db.auth.admin.getUserById(body.user_id);
+    const email = staffUser.user?.email;
+    if (staffUserError || !email) return reply({ error: "Não foi possível localizar o e-mail do funcionário." }, 404);
+
+    const { data: generated, error: generateError } = await db.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo: "https://cardapiosabordochef.com.br/portal-funcionarios.html" }
+    });
+    const actionLink = generated?.properties?.action_link;
+    if (generateError || !actionLink) {
+      return reply({ error: generateError?.message ?? "Não foi possível gerar o link de senha." }, 400);
+    }
+    return reply({ ok: true, user_id: body.user_id, email, action_link: actionLink });
+  }
+
   if (body.action === "set_active") {
     if (!body.user_id || typeof body.is_active !== "boolean") return reply({ error: "Dados de ativação inválidos." }, 400);
     const { error } = await db.from("user_roles")
