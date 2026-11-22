@@ -18,7 +18,8 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$trigger$;\nDROP TRIGGER IF EXISTS print_jobs_realtime_wakeup ON public.print_jobs;
+$trigger$;
+DROP TRIGGER IF EXISTS print_jobs_realtime_wakeup ON public.print_jobs;
 CREATE TRIGGER print_jobs_realtime_wakeup
 AFTER INSERT OR UPDATE OF status ON public.print_jobs
 FOR EACH ROW EXECUTE FUNCTION public.notify_printer_queue_realtime();
