@@ -117,9 +117,13 @@ Deno.serve(async (req: Request) => {
         next_attempt_at: nowIso,
         last_error: "Conexão interrompida durante a impressão; tarefa recolocada na fila."
       }).in("id", staleIds).eq("status", "PROCESSANDO");
-      const orderIds = staleJobs.map((job: { order_id: string }) => job.order_id);
-      await db.from("orders").update({ status: "FALHA_IMPRESSAO" })
-        .in("id", orderIds).eq("status", "ENVIADO_IMPRESSAO");
+      const orderIds = staleJobs
+        .filter((job: { order_id: string | null }) => job.order_id)
+        .map((job: { order_id: string }) => job.order_id);
+      if (orderIds.length) {
+        await db.from("orders").update({ status: "FALHA_IMPRESSAO" })
+          .in("id", orderIds).eq("status", "ENVIADO_IMPRESSAO");
+      }
     }
 
     for (let attempt = 0; attempt < 3; attempt++) {
