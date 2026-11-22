@@ -377,7 +377,7 @@ class PrintService : Service() {
         out.write(byteArrayOf(0x1D, 0x21, 0x33))
         out.write(PrinterText.encode("MESA $tableNumber\n"))
         out.write(byteArrayOf(0x1D, 0x21, 0x00))
-        out.write(PrinterText.encode("SABOR DO CHEF\\n"))
+        out.write(PrinterText.encode("SABOR DO CHEF\n"))
         out.write(byteArrayOf(0x1B, 0x61, 0x00))
         out.write(copy)
         out.write(cut)
