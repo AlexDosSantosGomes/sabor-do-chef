@@ -53,6 +53,6 @@ BEGIN
  ON CONFLICT (dining_tab_id) WHERE job_type='TAB_CLOSE' DO NOTHING RETURNING id INTO v_job;
  IF v_job IS NULL THEN SELECT id INTO v_job FROM public.print_jobs WHERE dining_tab_id=p_tab_id AND job_type='TAB_CLOSE'; END IF;
  RETURN jsonb_build_object('tab_id',p_tab_id,'table_number',v_table_number,'total_cents',v_total,'payment_method',p_payment_method,'print_job_id',v_job,'print_queued',true);
-END; $$;
+END; $close$;
 REVOKE ALL ON FUNCTION public.close_dining_tab_with_payment(uuid,text,text) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.close_dining_tab_with_payment(uuid,text,text) TO authenticated;
