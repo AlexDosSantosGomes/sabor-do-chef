@@ -99,7 +99,7 @@ async function loadSalonOverview(){
     btn.disabled=true;
     const {data,error}=await supabase.rpc('close_dining_tab_with_payment',{p_tab_id:btn.dataset.tab,p_payment_method:payment,p_closing_note:null});
     if(error){alert(error.message);btn.disabled=false;return;}
-    alert('Conta fechada. Total recebido: '+money(data.total_cents));
+    alert('Conta fechada. Total recebido: '+money(data.total_cents)+'. Fechamento enviado para a fila de impressão.');
     await loadSalonOverview();
   }));
   $('roleContent').querySelectorAll('.salon-order-action').forEach(btn=>btn.addEventListener('click',async()=>{
