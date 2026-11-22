@@ -34,9 +34,9 @@ class RealtimePrintListener(
         thread(name = "sabor-realtime-connect") { reconnectLoop() }
     }
 
-    fun awaitSignal(timeoutMs: Long) {
+    fun awaitSignal() {
         synchronized(monitor) {
-            if (active) monitor.wait(timeoutMs)
+            while (active) monitor.wait()
         }
     }
 
@@ -129,7 +129,7 @@ class RealtimePrintListener(
             } catch (_: InterruptedException) {
                 break
             } catch (_: Exception) {
-                // The normal queue polling remains active while Realtime reconnects.
+                // No database polling fallback: reconnect logic restores the Realtime channel.
             } finally {
                 try { heartbeat?.interrupt() } catch (_: Exception) { }
                 socket = null
