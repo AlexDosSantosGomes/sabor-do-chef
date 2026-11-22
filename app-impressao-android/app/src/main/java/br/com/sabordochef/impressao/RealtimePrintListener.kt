@@ -19,6 +19,8 @@ class RealtimePrintListener(
     private val onSignal: () -> Unit
 ) {
     private val monitor = Object()
+    // Latch a wake-up that arrives between the queue check and awaitSignal().
+    private var signalPending = false
     @Volatile private var active = false
     @Volatile private var socket: WebSocket? = null
     private val client = OkHttpClient.Builder()
@@ -40,12 +42,16 @@ class RealtimePrintListener(
      */
     fun awaitSignal() {
         synchronized(monitor) {
-            if (active) monitor.wait()
+            while (active && !signalPending) monitor.wait()
+            signalPending = false
         }
     }
 
     private fun signal() {
-        synchronized(monitor) { monitor.notifyAll() }
+        synchronized(monitor) {
+            signalPending = true
+            monitor.notifyAll()
+        }
         try { onSignal() } catch (_: Exception) { }
     }
 
