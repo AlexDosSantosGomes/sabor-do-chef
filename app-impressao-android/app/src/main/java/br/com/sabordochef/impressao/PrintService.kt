@@ -85,7 +85,9 @@ class PrintService : Service() {
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
-                    realtimeListener?.awaitSignal()
+                    // Realtime is the primary wake-up. A bounded wait guarantees
+                    // the queue is rechecked even if a broadcast is dropped.
+                    realtimeListener?.awaitSignal(30_000L) ?: Thread.sleep(30_000L)
                     continue
                 }
 
@@ -310,7 +312,7 @@ class PrintService : Service() {
         val out = java.io.ByteArrayOutputStream()
         out.write(PrinterText.initialize())
         out.write(byteArrayOf(0x1B, 0x61, 0x01))
-        out.write(byteArrayOf(0x1D, 0x21, 0x11))
+        out.write(byteArrayOf(0x1D, 0x21, 0x33))
         out.write(PrinterText.encode("MESA $tableNumber\n"))
         out.write(byteArrayOf(0x1D, 0x21, 0x00))
         out.write(PrinterText.encode("SABOR DO CHEF\n"))
@@ -372,8 +374,8 @@ class PrintService : Service() {
         out.write(PrinterText.initialize())
         // Número da mesa em destaque grande para pedidos do QR Code e lançamentos da equipe.
         out.write(byteArrayOf(0x1B, 0x61, 0x01))
-        out.write(byteArrayOf(0x1D, 0x21, 0x11))
-        out.write(PrinterText.encode("MESA $tableNumber\\n"))
+        out.write(byteArrayOf(0x1D, 0x21, 0x33))
+        out.write(PrinterText.encode("MESA $tableNumber\n"))
         out.write(byteArrayOf(0x1D, 0x21, 0x00))
         out.write(PrinterText.encode("SABOR DO CHEF\\n"))
         out.write(byteArrayOf(0x1B, 0x61, 0x00))

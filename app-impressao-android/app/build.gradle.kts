@@ -11,8 +11,8 @@ android {
         applicationId = "br.com.sabordochef.impressao"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 7
+        versionName = "0.4.3"
     }
 
     compileOptions {
