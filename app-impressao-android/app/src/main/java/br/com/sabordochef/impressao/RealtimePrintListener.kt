@@ -35,13 +35,12 @@ class RealtimePrintListener(
     }
 
     /**
-     * Wait for a Realtime wake-up, but periodically return to the authenticated
-     * queue API as a safety net. Broadcasts are best-effort and can be missed
-     * during reconnects or in the small gap between claim() and waiting.
+     * Wait for a Realtime wake-up. The queue is checked when a signal arrives;
+     * this listener does not add periodic database polling while the queue is empty.
      */
-    fun awaitSignal(timeoutMs: Long = 25_000L) {
+    fun awaitSignal() {
         synchronized(monitor) {
-            if (active) monitor.wait(timeoutMs.coerceAtLeast(1L))
+            if (active) monitor.wait()
         }
     }
 
