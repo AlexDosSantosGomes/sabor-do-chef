@@ -34,9 +34,14 @@ class RealtimePrintListener(
         thread(name = "sabor-realtime-connect") { reconnectLoop() }
     }
 
-    fun awaitSignal() {
+    /**
+     * Wait for a Realtime wake-up, but periodically return to the authenticated
+     * queue API as a safety net. Broadcasts are best-effort and can be missed
+     * during reconnects or in the small gap between claim() and waiting.
+     */
+    fun awaitSignal(timeoutMs: Long = 25_000L) {
         synchronized(monitor) {
-            while (active) monitor.wait()
+            if (active) monitor.wait(timeoutMs.coerceAtLeast(1L))
         }
     }
 
