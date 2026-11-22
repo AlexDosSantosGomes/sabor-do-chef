@@ -85,7 +85,9 @@ class PrintService : Service() {
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
-                    realtimeListener?.awaitSignal()
+                    // Realtime is the primary wake-up. A bounded wait guarantees
+                    // the queue is rechecked even if a broadcast is dropped.
+                    realtimeListener?.awaitSignal(30_000L) ?: Thread.sleep(30_000L)
                     continue
                 }
 
