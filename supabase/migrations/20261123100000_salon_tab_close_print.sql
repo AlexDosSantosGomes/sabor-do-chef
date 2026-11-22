@@ -24,7 +24,7 @@ AFTER INSERT OR UPDATE OF status ON public.print_jobs
 FOR EACH ROW EXECUTE FUNCTION public.notify_printer_queue_realtime();
 
 CREATE OR REPLACE FUNCTION public.close_dining_tab_with_payment(p_tab_id uuid,p_payment_method text,p_closing_note text DEFAULT NULL)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $close$
 DECLARE v_total bigint; v_status text; v_table_id uuid; v_table_number integer; v_job uuid;
 BEGIN
  IF (SELECT auth.uid()) IS NULL THEN RAISE EXCEPTION 'É necessário entrar com uma conta autorizada.'; END IF;
