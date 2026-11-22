@@ -19,7 +19,20 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 .primary{background:var(--red);color:#fff}.secondary{background:#f1f2f5;color:#343944}
 .full{width:100%;margin-top:18px}.muted{color:var(--muted);font-size:13px}.message{font-size:14px;margin-top:12px}.error{color:#b00020}.success{color:#16723a}
 .hidden{display:none!important}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:start}
+.table-card{min-width:0}
+.order-card{border:1px solid var(--border);border-radius:13px;padding:12px;background:#fff;margin:0;min-width:0}
+.table-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:54px}
+.table-number{font-size:30px;line-height:1;font-weight:950;letter-spacing:-1px;color:var(--red);white-space:nowrap}
+.table-state{font-size:11px;padding:4px 7px}
+.table-details{border-top:1px solid var(--border);margin-top:10px;padding-top:8px}
+.table-details summary{cursor:pointer;color:var(--red);font-size:12px;font-weight:850;list-style:none}
+.table-details summary::-webkit-details-marker{display:none}
+.table-details summary:after{content:'＋';float:right}
+.table-details[open] summary:after{content:'−'}
+.table-details>*:not(summary){margin-top:10px}
+@media(max-width:900px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.order-card{padding:10px}.table-number{font-size:27px}.table-state{font-size:10px;padding:3px 6px}}
 .order-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff;margin:12px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.danger{background:#fff0f0;color:#a10e18}.order-card ul{padding-left:20px}.table-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff}
 .pill{display:inline-block;border-radius:30px;padding:4px 9px;font-size:12px;font-weight:800;background:#edf7ef;color:#16723a}
 .pill.closed{background:#f1f2f5;color:#626875}
@@ -84,7 +97,7 @@ async function loadSalonOverview(){
     const body=tab?'<p><strong>Total acumulado: '+money(total)+'</strong></p>'+(orderHtml||'<p class="muted">Ainda não há itens nesta comanda.</p>')+
       '<form class="salon-add-form" data-tab="'+tab.id+'"><label>Adicionar produto</label><select name="product_id" required>'+options+'</select><label>Quantidade</label><input name="quantity" type="number" min="1" max="20" value="1" required><label>Observação do item (opcional)</label><input name="notes" maxlength="200" placeholder="Ex.: sem cebola"><label>Observação do pedido (opcional)</label><input name="customer_notes" maxlength="300" placeholder="Observação para a cozinha"><button class="primary full" type="submit">Adicionar à comanda</button></form><label>Forma de pagamento na saída</label><select class="salon-payment" data-tab="'+tab.id+'"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button class="danger full salon-close" data-tab="'+tab.id+'">Fechar conta e liberar mesa</button>'
       :'<p class="muted">Mesa sem comanda aberta.</p>'+(t.active?'<button class="primary salon-open" data-table="'+t.id+'">Abrir comanda</button>':'<span class="pill closed">Mesa inativa</span>');
-    return '<article class="order-card"><div class="top"><strong>Mesa '+safe(t.table_number)+'</strong><span class="pill '+(tab?'':'closed')+'">'+(tab?'Comanda aberta':'Livre')+'</span></div>'+body+'</article>';
+    return '<article class="order-card"><div class="table-heading"><strong class="table-number">Mesa '+safe(t.table_number)+'</strong><span class="pill table-state '+(tab?'':'closed')+'">'+(tab?'Ocupada':'Livre')+'</span></div><details class="table-details"><summary>'+(tab?'Abrir comanda':'Ações da mesa')+'</summary>'+body+'</details></article>';
   }).join('');
   $('roleContent').innerHTML='<div class="top"><h2>Salão · 10 mesas</h2><button class="secondary" id="refreshSalon">Atualizar</button></div><p class="muted">Os pedidos lançados aqui ficam vinculados à comanda aberta. O pagamento é realizado na saída. Impressão e QR Code do cliente serão integrados na próxima etapa.</p><div class="grid">'+(cards||'<p>Nenhuma mesa cadastrada.</p>')+'</div>';
   $('refreshSalon').addEventListener('click',loadSalonOverview);
