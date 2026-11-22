@@ -37,13 +37,23 @@ class RealtimePrintListener(
     }
 
     /**
-     * Wait for a Realtime wake-up. The queue is checked when a signal arrives;
-     * this listener does not add periodic database polling while the queue is empty.
+     * Wait for a Realtime wake-up, but never block forever.
+     * The pending latch closes the check-to-wait race; the timeout is a safety
+     * net for dropped broadcasts or a socket that appears connected but is stale.
+     * On timeout, the worker checks the authenticated queue again.
      */
-    fun awaitSignal() {
+    fun awaitSignal(timeoutMs: Long = 30_000L): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
         synchronized(monitor) {
-            while (active && !signalPending) monitor.wait()
+            while (active && !signalPending) {
+                val remainingNanos = deadline - System.nanoTime()
+                if (remainingNanos <= 0L) break
+                val waitMs = TimeUnit.NANOSECONDS.toMillis(remainingNanos).coerceAtLeast(1L)
+                monitor.wait(waitMs)
+            }
+            val received = signalPending
             signalPending = false
+            return received
         }
     }
 
