@@ -91,9 +91,10 @@ Deno.serve(async (req: Request) => {
     const { data: staffUser, error: staffUserError } = await db.auth.admin.getUserById(body.user_id);
     const email = staffUser?.user?.email;
     if (staffUserError || !email) return reply({ error: "Não foi possível localizar o e-mail do funcionário." }, 404);
+    const linkType = staffUser.user.email_confirmed_at ? "recovery" : "invite";
 
     const { data: generated, error: generateError } = await db.auth.admin.generateLink({
-      type: "recovery",
+      type: linkType,
       email,
       options: { redirectTo: "https://cardapiosabordochef.com.br/portal-funcionarios.html" }
     });
