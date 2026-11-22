@@ -1,6 +1,4 @@
 ALTER TABLE public.print_jobs
-  DROP CONSTRAINT IF EXISTS print_jobs_order_id_key;
-ALTER TABLE public.print_jobs
   ALTER COLUMN order_id DROP NOT NULL,
   ADD COLUMN IF NOT EXISTS job_type text NOT NULL DEFAULT 'ORDER',
   ADD COLUMN IF NOT EXISTS dining_tab_id uuid REFERENCES public.dining_tabs(id);
@@ -9,7 +7,6 @@ ALTER TABLE public.print_jobs ADD CONSTRAINT print_jobs_payload_check CHECK (
  (job_type='ORDER' AND order_id IS NOT NULL AND dining_tab_id IS NULL)
  OR (job_type='TAB_CLOSE' AND order_id IS NULL AND dining_tab_id IS NOT NULL)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS print_jobs_order_id_unique ON public.print_jobs(order_id) WHERE order_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS print_jobs_tab_close_unique ON public.print_jobs(dining_tab_id) WHERE job_type='TAB_CLOSE';
 CREATE INDEX IF NOT EXISTS print_jobs_pending_queue_idx ON public.print_jobs(status,next_attempt_at,created_at);
 
