@@ -10,6 +10,20 @@ ALTER TABLE public.print_jobs ADD CONSTRAINT print_jobs_payload_check CHECK (
 CREATE UNIQUE INDEX IF NOT EXISTS print_jobs_tab_close_unique ON public.print_jobs(dining_tab_id) WHERE job_type='TAB_CLOSE';
 CREATE INDEX IF NOT EXISTS print_jobs_pending_queue_idx ON public.print_jobs(status,next_attempt_at,created_at);
 
+CREATE OR REPLACE FUNCTION public.notify_printer_queue_realtime()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $
+BEGIN
+  IF NEW.status='PENDENTE' AND (TG_OP='INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
+    PERFORM realtime.send('{}'::jsonb,'queue_changed','printer-queue',false);
+  END IF;
+  RETURN NEW;
+END;
+$;
+DROP TRIGGER IF EXISTS print_jobs_realtime_wakeup ON public.print_jobs;
+CREATE TRIGGER print_jobs_realtime_wakeup
+AFTER INSERT OR UPDATE OF status ON public.print_jobs
+FOR EACH ROW EXECUTE FUNCTION public.notify_printer_queue_realtime();
+
 CREATE OR REPLACE FUNCTION public.close_dining_tab_with_payment(p_tab_id uuid,p_payment_method text,p_closing_note text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE v_total bigint; v_status text; v_table_id uuid; v_table_number integer; v_job uuid;
