@@ -91,7 +91,7 @@ const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publi
 const $=id=>document.getElementById(id);
 const salonCarts=new Map();
 const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const normalizeText=v=>String(v||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();
+const normalizeText=v=>String(v||'').toLowerCase().trim();
 function isQuentinha(p){return normalizeText(p.category_name||'').includes('quentinha')}
 function salonCartFor(tabId){if(!salonCarts.has(tabId))salonCarts.set(tabId,{items:new Map(),category:'all',notes:''});return salonCarts.get(tabId)}
 function renderSalonProducts(root,cart,products,categories){
@@ -132,8 +132,9 @@ function bindSalonComposer(root,tabId,products,categories,accompByProduct){
   if(remove){cart.items.delete(remove.dataset.product);renderSalonCart(root,tabId,cart,products,accompByProduct);return;}
   if(e.target.closest('.salon-submit')){
    const count=[...cart.items.values()].reduce((n,x)=>n+x.units.length,0);if(!count)return;
-   const review=[...cart.items.values()].map(x=>x.units.length+'x '+x.product.name).join('\\n');
-   if(!confirm('Confirma enviar este pedido para a mesa?\\n\\n'+review+'\\n\\nTotal: '+money([...cart.items.values()].reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0))))return;
+   const lineBreak=String.fromCharCode(10);
+   const review=[...cart.items.values()].map(x=>x.units.length+'x '+x.product.name).join(lineBreak);
+   if(!confirm('Confirma enviar este pedido para a mesa?'+lineBreak+lineBreak+review+lineBreak+lineBreak+'Total: '+money([...cart.items.values()].reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0))))return;
    const btn=e.target.closest('.salon-submit');btn.disabled=true;btn.textContent='Enviando pedido...';
    const payload=[...cart.items.values()].map(x=>({product_id:x.product.id,quantity:x.units.length,notes:x.notes||'',accompaniments_by_unit:isQuentinha(x.product)?x.units:x.units.map(()=>[])}));
    const {data,error}=await supabase.rpc('create_salon_order',{p_tab_id:tabId,p_items:payload,p_customer_notes:cart.notes});
