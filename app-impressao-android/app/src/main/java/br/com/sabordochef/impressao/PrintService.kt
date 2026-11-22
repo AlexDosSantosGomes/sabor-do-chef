@@ -25,6 +25,7 @@ class PrintService : Service() {
     @Volatile private var running = false
     private var worker: Thread? = null
     private var cpuWakeLock: PowerManager.WakeLock? = null
+    private var realtimeListener: RealtimePrintListener? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -41,6 +42,8 @@ class PrintService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!running) {
             running = true
+            realtimeListener = RealtimePrintListener { updateNotification("Realtime recebeu aviso — verificando fila") }
+            realtimeListener?.connect()
             worker = thread(name = "sabor-print-queue") { pollQueue() }
         }
         return START_STICKY
@@ -49,6 +52,8 @@ class PrintService : Service() {
     override fun onDestroy() {
         running = false
         worker?.interrupt()
+        realtimeListener?.close()
+        realtimeListener = null
         cpuWakeLock?.let { if (it.isHeld) it.release() }
         cpuWakeLock = null
         super.onDestroy()
@@ -80,7 +85,9 @@ class PrintService : Service() {
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
-                    Thread.sleep(25000)
+                    // Realtime is the primary wake-up. A bounded wait guarantees
+                    // the queue is rechecked even if a broadcast is dropped.
+                    realtimeListener?.awaitSignal(30_000L) ?: Thread.sleep(30_000L)
                     continue
                 }
 
@@ -168,6 +175,10 @@ class PrintService : Service() {
             return buildPickupTickets(order, items, accByItem)
         }
 
+        if (order.optString("order_type").equals("TAB_CLOSE", ignoreCase = true)) {
+            return buildDiningTabCloseTicket(order, job.optJSONArray("orders"), items, accByItem)
+        }
+
         if (order.optString("order_type").equals("SALAO", ignoreCase = true)) {
             return buildSalonTicket(order, items, accByItem)
         }
@@ -245,6 +256,72 @@ class PrintService : Service() {
         return out.toByteArray()
     }
 
+
+    private fun buildDiningTabCloseTicket(
+        order: JSONObject,
+        orders: org.json.JSONArray?,
+        items: org.json.JSONArray?,
+        accByItem: Map<String, List<String>>
+    ): ByteArray {
+        val amountFormat = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+        }
+        fun brl(cents: Int) = "R$ " + amountFormat.format(cents / 100.0)
+        val tableNumber = order.optString("table_number", "N/I")
+        val total = brl(order.optInt("total_cents", 0))
+        val closedAt = order.optString("created_at")
+        val instant = try { Instant.parse(closedAt) } catch (_: Exception) { null }
+        val dateTime = instant?.atZone(ZoneId.of("America/Sao_Paulo"))
+            ?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")))
+            ?: "Horário não disponível"
+        val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
+            "DINHEIRO" -> "DINHEIRO"
+            "PIX" -> "PIX"
+            "CARTAO" -> "CARTÃO"
+            else -> order.optString("payment_method", "NÃO INFORMADO")
+        }
+
+        val ticket = buildString {
+            append("SABOR DO CHEF\n")
+            append("================================\n")
+            append("FECHAMENTO DA CONTA\n")
+            append("FECHADA EM: ").append(dateTime).append("\n")
+            append("PEDIDOS NA COMANDA: ").append(order.optInt("order_count", 0)).append("\n")
+            append("--------------------------------\n")
+            append("ITENS CONSUMIDOS\n")
+            if (items != null) {
+                for (i in 0 until items.length()) {
+                    val item = items.getJSONObject(i)
+                    val qty = item.optInt("quantity", 1)
+                    val subtotal = item.optInt("unit_price_cents", 0) * qty
+                    append(qty).append("x ").append(item.optString("product_name_snapshot"))
+                        .append(" — ").append(brl(subtotal)).append("\n")
+                    accByItem[item.optString("id")]?.forEach { append("  + ").append(it).append("\n") }
+                    val notes = item.optString("notes")
+                    if (notes.isNotBlank() && notes != "null") append("  Obs.: ").append(notes).append("\n")
+                }
+            }
+            append("--------------------------------\n")
+            append("FORMA DE PAGAMENTO: ").append(payment).append("\n")
+            append("TOTAL PAGO: ").append(total).append("\n")
+            append("CONTA ENCERRADA\n")
+            append("--------------------------------\n\n\n")
+        }
+
+        val out = java.io.ByteArrayOutputStream()
+        out.write(PrinterText.initialize())
+        out.write(byteArrayOf(0x1B, 0x61, 0x01))
+        out.write(byteArrayOf(0x1D, 0x21, 0x33))
+        out.write(PrinterText.encode("MESA $tableNumber\n"))
+        out.write(byteArrayOf(0x1D, 0x21, 0x00))
+        out.write(PrinterText.encode("SABOR DO CHEF\n"))
+        out.write(byteArrayOf(0x1B, 0x61, 0x00))
+        out.write(PrinterText.encode(ticket))
+        out.write(byteArrayOf(0x1D, 0x56, 0x00))
+        return out.toByteArray()
+    }
+
     private fun buildSalonTicket(
         order: JSONObject,
         items: org.json.JSONArray?,
@@ -268,7 +345,6 @@ class PrintService : Service() {
             append("SABOR DO CHEF\n")
             append("PEDIDO DO SALÃO\n")
             append("================================\n")
-            append("MESA ").append(tableNumber).append("\n")
             append("PEDIDO Nº ").append(number).append("\n")
             append("DATA/HORA: ").append(dateTime).append("\n")
             if (notes.isNotBlank()) append("OBSERVAÇÃO: ").append(notes).append("\n")
@@ -296,6 +372,13 @@ class PrintService : Service() {
         val cut = byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
         val out = java.io.ByteArrayOutputStream()
         out.write(PrinterText.initialize())
+        // Número da mesa em destaque grande para pedidos do QR Code e lançamentos da equipe.
+        out.write(byteArrayOf(0x1B, 0x61, 0x01))
+        out.write(byteArrayOf(0x1D, 0x21, 0x33))
+        out.write(PrinterText.encode("MESA $tableNumber\n"))
+        out.write(byteArrayOf(0x1D, 0x21, 0x00))
+        out.write(PrinterText.encode("SABOR DO CHEF\n"))
+        out.write(byteArrayOf(0x1B, 0x61, 0x00))
         out.write(copy)
         out.write(cut)
         return out.toByteArray()
