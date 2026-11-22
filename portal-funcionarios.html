@@ -38,6 +38,7 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 .pill.closed{background:#f1f2f5;color:#626875}
 .notice{padding:14px;border:1px solid #f0d99b;background:#fff9e9;border-radius:12px;margin-top:14px}
 .salon-composer{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.salon-composer h3{font-size:22px;font-weight:950;color:var(--red);margin:8px 0}
 .salon-categories{display:flex;gap:7px;overflow:auto;padding:3px 0 10px}
 .salon-categories button{white-space:nowrap;padding:8px 11px;font-size:12px;background:#f1f2f5;color:#343944}
 .salon-categories button.active{background:var(--red);color:#fff}
@@ -134,13 +135,13 @@ function bindSalonComposer(root,tabId,products,categories,accompByProduct){
    const count=[...cart.items.values()].reduce((n,x)=>n+x.units.length,0);if(!count)return;
    const lineBreak=String.fromCharCode(10);
    const review=[...cart.items.values()].map(x=>x.units.length+'x '+x.product.name).join(lineBreak);
-   if(!confirm('Confirma enviar este pedido para a mesa?'+lineBreak+lineBreak+review+lineBreak+lineBreak+'Total: '+money([...cart.items.values()].reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0))))return;
+   if(!confirm('Confirma enviar este pedido para a Mesa '+root.dataset.tableNumber+'?'+lineBreak+lineBreak+review+lineBreak+lineBreak+'Total: '+money([...cart.items.values()].reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0))))return;
    const btn=e.target.closest('.salon-submit');btn.disabled=true;btn.textContent='Enviando pedido...';
    const payload=[...cart.items.values()].map(x=>({product_id:x.product.id,quantity:x.units.length,notes:x.notes||'',accompaniments_by_unit:isQuentinha(x.product)?x.units:x.units.map(()=>[])}));
    const {data,error}=await supabase.rpc('create_salon_order',{p_tab_id:tabId,p_items:payload,p_customer_notes:cart.notes});
    if(error){alert(error.message);btn.disabled=false;btn.textContent='Revisar e enviar pedido para esta mesa';return;}
    salonCarts.delete(tabId);
-   alert('Pedido #'+data.order_number+' enviado para a Mesa. Total: '+money(data.total_cents));
+   alert('Pedido #'+data.order_number+' enviado para a Mesa '+root.dataset.tableNumber+'. Total: '+money(data.total_cents));
    await loadSalonOverview();
   }
  });
@@ -196,7 +197,7 @@ async function loadSalonOverview(){
     const total=tabOrders.reduce((sum,o)=>sum+Number(o.total_cents||0),0);
     const orderHtml=tabOrders.map(o=>'<div class="table-card"><div class="top"><strong>Pedido #'+safe(o.order_number)+'</strong><span class="pill '+(o.status==='CANCELADO'?'closed':'')+'">'+safe(o.status)+'</span></div><ul>'+((o.order_items||[]).map(i=>'<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?' · '+safe(i.notes):'')+((i.order_item_accompaniments||[]).map(a=>'<div class="muted">Prato '+safe(a.unit_index)+': '+safe(a.accompaniment_name)+'</div>').join(''))+'</li>').join(''))+'</ul>'+(o.customer_notes?'<p class="muted">Obs.: '+safe(o.customer_notes)+'</p>':'')+(o.cancellation_reason?'<p class="muted">Motivo: '+safe(o.cancellation_reason)+'</p>':'')+(['RECEBIDO','AGUARDANDO_APROVACAO'].includes(o.status)?'<div class="actions"><button class="primary salon-order-action" data-action="APPROVE" data-order="'+o.id+'">Aceitar e imprimir</button><button class="danger salon-order-action" data-action="REJECT" data-order="'+o.id+'">Recusar</button></div>':'')+'<small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></div>').join('');
     const categoryButtons='<button type="button" class="active" data-category="all">Todas</button>'+categories.map(c=>'<button type="button" data-category="'+c.id+'">'+safe(c.name)+'</button>').join('');
-    const composer=tab?'<section class="salon-composer" data-salon-composer="'+tab.id+'"><h3>Novo pedido · Mesa '+safe(t.table_number)+'</h3><p class="muted">Escolha os produtos, monte o carrinho e confira antes de enviar.</p><div class="salon-categories">'+categoryButtons+'</div><div class="salon-products"></div><div class="salon-cart"></div></section>':'';
+    const composer=tab?'<section class="salon-composer" data-salon-composer="'+tab.id+'" data-table-number="'+safe(t.table_number)+'"><h3>Novo pedido · Mesa '+safe(t.table_number)+'</h3><p class="muted">Escolha os produtos, monte o carrinho e confira antes de enviar.</p><div class="salon-categories">'+categoryButtons+'</div><div class="salon-products"></div><div class="salon-cart"></div></section>':'';
     const body=tab?'<p><strong>Total acumulado da comanda: '+money(total)+'</strong></p>'+(orderHtml||'<p class="muted">Ainda não há itens nesta comanda.</p>')+composer+'<label>Forma de pagamento na saída</label><select class="salon-payment" data-tab="'+tab.id+'"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button class="danger full salon-close" data-tab="'+tab.id+'">Fechar conta e liberar mesa</button>'
       :'<p class="muted">Mesa sem comanda aberta.</p>'+(t.active?'<button class="primary salon-open" data-table="'+t.id+'">Abrir comanda</button>':'<span class="pill closed">Mesa inativa</span>');
     return '<article class="order-card"><div class="table-heading"><strong class="table-number">Mesa '+safe(t.table_number)+'</strong><span class="pill table-state '+(tab?'':'closed')+'">'+(tab?'Ocupada':'Livre')+'</span></div><details class="table-details"><summary>'+(tab?'Abrir comanda':'Ações da mesa')+'</summary>'+body+'</details></article>';
