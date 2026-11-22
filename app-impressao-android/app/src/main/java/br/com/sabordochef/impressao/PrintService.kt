@@ -276,40 +276,40 @@ class PrintService : Service() {
         }
 
         val ticket = buildString {
-            append("SABOR DO CHEF\\n")
-            append("================================\\n")
-            append("FECHAMENTO DA CONTA\\n")
-            append("MESA ").append(tableNumber).append("\\n")
-            append("FECHADA EM: ").append(dateTime).append("\\n")
-            append("PEDIDOS NA COMANDA: ").append(order.optInt("order_count", 0)).append("\\n")
-            append("--------------------------------\\n")
-            append("ITENS CONSUMIDOS\\n")
+            append("SABOR DO CHEF\n")
+            append("================================\n")
+            append("FECHAMENTO DA CONTA\n")
+            append("MESA ").append(tableNumber).append("\n")
+            append("FECHADA EM: ").append(dateTime).append("\n")
+            append("PEDIDOS NA COMANDA: ").append(order.optInt("order_count", 0)).append("\n")
+            append("--------------------------------\n")
+            append("ITENS CONSUMIDOS\n")
             if (items != null) {
                 for (i in 0 until items.length()) {
                     val item = items.getJSONObject(i)
                     val qty = item.optInt("quantity", 1)
                     val subtotal = item.optInt("unit_price_cents", 0) * qty
                     append(qty).append("x ").append(item.optString("product_name_snapshot"))
-                        .append(" — ").append(brl(subtotal)).append("\\n")
-                    accByItem[item.optString("id")]?.forEach { append("  + ").append(it).append("\\n") }
+                        .append(" — ").append(brl(subtotal)).append("\n")
+                    accByItem[item.optString("id")]?.forEach { append("  + ").append(it).append("\n") }
                     val notes = item.optString("notes")
-                    if (notes.isNotBlank() && notes != "null") append("  Obs.: ").append(notes).append("\\n")
+                    if (notes.isNotBlank() && notes != "null") append("  Obs.: ").append(notes).append("\n")
                 }
             }
-            append("--------------------------------\\n")
-            append("FORMA DE PAGAMENTO: ").append(payment).append("\\n")
-            append("TOTAL PAGO: ").append(total).append("\\n")
-            append("CONTA ENCERRADA\\n")
-            append("--------------------------------\\n\\n\\n")
+            append("--------------------------------\n")
+            append("FORMA DE PAGAMENTO: ").append(payment).append("\n")
+            append("TOTAL PAGO: ").append(total).append("\n")
+            append("CONTA ENCERRADA\n")
+            append("--------------------------------\n\n\n")
         }
 
         val out = java.io.ByteArrayOutputStream()
         out.write(PrinterText.initialize())
         out.write(byteArrayOf(0x1B, 0x61, 0x01))
         out.write(byteArrayOf(0x1D, 0x21, 0x11))
-        out.write(PrinterText.encode("MESA $tableNumber\\n"))
+        out.write(PrinterText.encode("MESA $tableNumber\n"))
         out.write(byteArrayOf(0x1D, 0x21, 0x00))
-        out.write(PrinterText.encode("SABOR DO CHEF\\n"))
+        out.write(PrinterText.encode("SABOR DO CHEF\n"))
         out.write(byteArrayOf(0x1B, 0x61, 0x00))
         out.write(PrinterText.encode(ticket))
         out.write(byteArrayOf(0x1D, 0x56, 0x00))
