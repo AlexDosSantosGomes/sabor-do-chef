@@ -168,6 +168,10 @@ class PrintService : Service() {
             return buildPickupTickets(order, items, accByItem)
         }
 
+        if (order.optString("order_type").equals("TAB_CLOSE", ignoreCase = true)) {
+            return buildDiningTabCloseTicket(order, job.optJSONArray("orders"), items, accByItem)
+        }
+
         if (order.optString("order_type").equals("SALAO", ignoreCase = true)) {
             return buildSalonTicket(order, items, accByItem)
         }
@@ -242,6 +246,73 @@ class PrintService : Service() {
         out.write(cut)
         out.write(courierCopy)
         out.write(cut)
+        return out.toByteArray()
+    }
+
+
+    private fun buildDiningTabCloseTicket(
+        order: JSONObject,
+        orders: org.json.JSONArray?,
+        items: org.json.JSONArray?,
+        accByItem: Map<String, List<String>>
+    ): ByteArray {
+        val amountFormat = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+        }
+        fun brl(cents: Int) = "R$ " + amountFormat.format(cents / 100.0)
+        val tableNumber = order.optString("table_number", "N/I")
+        val total = brl(order.optInt("total_cents", 0))
+        val closedAt = order.optString("created_at")
+        val instant = try { Instant.parse(closedAt) } catch (_: Exception) { null }
+        val dateTime = instant?.atZone(ZoneId.of("America/Sao_Paulo"))
+            ?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")))
+            ?: "Horário não disponível"
+        val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
+            "DINHEIRO" -> "DINHEIRO"
+            "PIX" -> "PIX"
+            "CARTAO" -> "CARTÃO"
+            else -> order.optString("payment_method", "NÃO INFORMADO")
+        }
+
+        val ticket = buildString {
+            append("SABOR DO CHEF\\n")
+            append("================================\\n")
+            append("FECHAMENTO DA CONTA\\n")
+            append("MESA ").append(tableNumber).append("\\n")
+            append("FECHADA EM: ").append(dateTime).append("\\n")
+            append("PEDIDOS NA COMANDA: ").append(order.optInt("order_count", 0)).append("\\n")
+            append("--------------------------------\\n")
+            append("ITENS CONSUMIDOS\\n")
+            if (items != null) {
+                for (i in 0 until items.length()) {
+                    val item = items.getJSONObject(i)
+                    val qty = item.optInt("quantity", 1)
+                    val subtotal = item.optInt("unit_price_cents", 0) * qty
+                    append(qty).append("x ").append(item.optString("product_name_snapshot"))
+                        .append(" — ").append(brl(subtotal)).append("\\n")
+                    accByItem[item.optString("id")]?.forEach { append("  + ").append(it).append("\\n") }
+                    val notes = item.optString("notes")
+                    if (notes.isNotBlank() && notes != "null") append("  Obs.: ").append(notes).append("\\n")
+                }
+            }
+            append("--------------------------------\\n")
+            append("FORMA DE PAGAMENTO: ").append(payment).append("\\n")
+            append("TOTAL PAGO: ").append(total).append("\\n")
+            append("CONTA ENCERRADA\\n")
+            append("--------------------------------\\n\\n\\n")
+        }
+
+        val out = java.io.ByteArrayOutputStream()
+        out.write(PrinterText.initialize())
+        out.write(byteArrayOf(0x1B, 0x61, 0x01))
+        out.write(byteArrayOf(0x1D, 0x21, 0x11))
+        out.write(PrinterText.encode("MESA $tableNumber\\n"))
+        out.write(byteArrayOf(0x1D, 0x21, 0x00))
+        out.write(PrinterText.encode("SABOR DO CHEF\\n"))
+        out.write(byteArrayOf(0x1B, 0x61, 0x00))
+        out.write(PrinterText.encode(ticket))
+        out.write(byteArrayOf(0x1D, 0x56, 0x00))
         return out.toByteArray()
     }
 
