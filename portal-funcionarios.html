@@ -77,6 +77,18 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 <label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" required placeholder="Sua senha">
 <button class="primary full" type="submit">Entrar</button>
 <div id="loginMessage" class="message" aria-live="polite"></div>
+<button class="secondary full" id="forgotPasswordBtn" type="button">Criar ou recuperar minha senha</button>
+</form>
+</section>
+<section id="passwordScreen" class="card login hidden">
+<div class="brand">Sabor do Chef</div>
+<h2>Definir senha de acesso</h2>
+<p class="muted">Crie uma senha para acessar sua área de funcionário.</p>
+<form id="passwordForm">
+<label for="newPassword">Nova senha</label><input id="newPassword" type="password" minlength="8" autocomplete="new-password" required placeholder="Mínimo de 8 caracteres">
+<label for="confirmPassword">Confirmar nova senha</label><input id="confirmPassword" type="password" minlength="8" autocomplete="new-password" required placeholder="Repita a senha">
+<button class="primary full" type="submit">Salvar senha</button>
+<div id="passwordMessage" class="message" aria-live="polite"></div>
 </form>
 </section>
 <section id="portalScreen" class="hidden">
@@ -165,7 +177,8 @@ function bindSalonComposer(root,tabId,products,categories,accompByProduct){
 }
 
 function message(id,text,type=''){const el=$(id);el.textContent=text;el.className='message '+type}
-function showLogin(){ $('loginScreen').classList.remove('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
+function showLogin(){ $('loginScreen').classList.remove('hidden');$('passwordScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
+function showPassword(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('passwordScreen').classList.remove('hidden');$('logoutBtn').classList.add('hidden'); }
 function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
 function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function loadSalonOverview(){
@@ -283,9 +296,31 @@ $('loginForm').addEventListener('submit',async e=>{
  if(error){message('loginMessage','Não foi possível entrar: '+error.message,'error');return}
  await startSession(data.user);
 });
+$('forgotPasswordBtn').addEventListener('click',async()=>{
+ const email=$('email').value.trim();
+ if(!email){message('loginMessage','Informe seu e-mail primeiro.','error');return;}
+ message('loginMessage','Enviando link para criar/recuperar a senha...');
+ const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:'https://cardapiosabordochef.com.br/portal-funcionarios.html'});
+ if(error){message('loginMessage','Não foi possível enviar: '+error.message,'error');return;}
+ message('loginMessage','Enviamos um link para '+email+'. Abra o e-mail neste celular para definir sua senha.','success');
+});
+$('passwordForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const a=$('newPassword').value,b=$('confirmPassword').value;
+ if(a.length<8){message('passwordMessage','A senha precisa ter pelo menos 8 caracteres.','error');return;}
+ if(a!==b){message('passwordMessage','As senhas não conferem.','error');return;}
+ const {error}=await supabase.auth.updateUser({password:a});
+ if(error){message('passwordMessage','Não foi possível salvar a senha: '+error.message,'error');return;}
+ message('passwordMessage','Senha criada com sucesso. Agora você já pode entrar.','success');
+ await supabase.auth.signOut();$('passwordForm').reset();showLogin();
+});
+supabase.auth.onAuthStateChange((event,session)=>{
+ if(session && (event==='PASSWORD_RECOVERY'||location.hash.includes('type=invite')||location.hash.includes('type=recovery'))){showPassword();}
+});
 $('logoutBtn').addEventListener('click',async()=>{await supabase.auth.signOut();showLogin()});
 const {data:sessionData}=await supabase.auth.getSession();
-if(sessionData.session?.user) await startSession(sessionData.session.user); else showLogin();
+if(sessionData.session?.user && (location.hash.includes('type=invite')||location.hash.includes('type=recovery'))) showPassword();
+else if(sessionData.session?.user) await startSession(sessionData.session.user); else showLogin();
 </script>
 </body>
 </html>

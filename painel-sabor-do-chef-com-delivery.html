@@ -24,6 +24,11 @@
 .history-details>summary:after{content:"＋";float:right;color:#b5121b;font-size:18px}
 .history-details[open]>summary:after{content:"−"}
 .history-details .history-content{padding:14px}
+.cash-close-box{margin-top:22px;padding:16px;border:1px solid #e9eaf0;border-radius:14px;background:#fff}
+.cash-close-box h3{margin:0 0 7px;color:#252a33}
+.cash-close-actions{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.cash-close-actions>div{flex:1 1 180px}
+@media(max-width:650px){.cash-close-actions button{width:100%}}
 :root {
   --red: #b5121b;
   --dark: #850d14;
@@ -456,6 +461,18 @@ button:active{transform:translateY(1px)}
     <div class="toolbar" style="align-items:center;flex-wrap:wrap;margin-top:16px">
       <label for="financeMonth" style="margin:0">Mês do relatório</label>
       <input id="financeMonth" type="month" style="max-width:190px">
+    </div>
+      <div class="cash-close-box">
+      <h3>Fechamento de Caixa</h3>
+      <p class="muted" style="margin:0 0 12px">Confira as vendas concluídas do dia e imprima o resumo para conferência do caixa.</p>
+      <div class="cash-close-actions">
+        <div>
+          <label for="cashCloseDate" style="margin-top:0">Data do fechamento</label>
+          <input id="cashCloseDate" type="date">
+        </div>
+        <button class="primary" id="printCashCloseBtn" type="button">Fechar caixa e imprimir</button>
+      </div>
+      <div id="cashCloseMessage" class="message muted" aria-live="polite">O fechamento será gerado somente quando o administrador solicitar.</div>
     </div>
     <div id="financeMessage" class="message muted">Carregue o relatório para consultar os números.</div>
     <div class="finance-grid" id="financeMetrics">
@@ -1643,6 +1660,119 @@ const nowForFinance = new Date();
 $('financeMonth').value = nowForFinance.getFullYear() + '-' + String(nowForFinance.getMonth() + 1).padStart(2, '0');
 $('financeMonth').addEventListener('change', loadFinancialReport);
 $('refreshFinanceBtn').addEventListener('click', loadFinancialReport);
+
+function cashCloseLocalDateRange(dateValue) {
+  const parts = dateValue.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(value => !Number.isFinite(value))) {
+    throw new Error('Selecione uma data válida.');
+  }
+  const start = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+  if (Number.isNaN(start.getTime())) throw new Error('Data inválida.');
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
+async function fetchAllRowsForCashClose(table, select, startIso, endIso, dateColumn) {
+  const all = [];
+  const pageSize = 1000;
+  let from = 0;
+  while (true) {
+    let request = supabase.from(table).select(select)
+      .gte(dateColumn, startIso).lt(dateColumn, endIso)
+      .order(dateColumn, { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (table === 'orders') request = request.eq('status', 'ENTREGUE').in('order_type', ['DELIVERY', 'PICKUP']);
+    if (table === 'dining_tabs') request = request.eq('status', 'CLOSED');
+    const { data, error } = await request;
+    if (error) throw error;
+    all.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
+function cashPaymentGroup(method) {
+  const value = String(method || '').trim().toUpperCase();
+  if (['CASH', 'DINHEIRO'].includes(value)) return 'cash';
+  if (['CARD', 'CARTAO', 'CARTÃO', 'CREDIT_CARD', 'DEBIT_CARD', 'CARTAO_CREDITO', 'CARTAO_DEBITO'].includes(value)) return 'card';
+  if (value === 'PIX') return 'pix';
+  return 'other';
+}
+
+async function printDailyCashClose() {
+  const popup = window.open('', '_blank');
+  if (!popup) {
+    showMessage('cashCloseMessage', 'Permita pop-ups para este painel e tente novamente.', 'error');
+    return;
+  }
+  const button = $('printCashCloseBtn');
+  button.disabled = true;
+  showMessage('cashCloseMessage', 'Calculando o fechamento do caixa...');
+  try {
+    const dateValue = $('cashCloseDate').value;
+    if (!dateValue) throw new Error('Selecione a data do fechamento.');
+    const { startIso, endIso } = cashCloseLocalDateRange(dateValue);
+    const [orders, tabs] = await Promise.all([
+      fetchAllRowsForCashClose('orders', 'order_number,order_type,payment_method,total_cents,created_at', startIso, endIso, 'created_at'),
+      fetchAllRowsForCashClose('dining_tabs', 'id,payment_method,paid_total_cents,closed_at', startIso, endIso, 'closed_at')
+    ]);
+
+    const totals = { cash: 0, card: 0, pix: 0, other: 0 };
+    const counts = { cash: 0, card: 0, pix: 0, other: 0 };
+    orders.forEach(order => {
+      const group = cashPaymentGroup(order.payment_method);
+      totals[group] += Number(order.total_cents || 0);
+      counts[group] += 1;
+    });
+    tabs.forEach(tab => {
+      const group = cashPaymentGroup(tab.payment_method);
+      totals[group] += Number(tab.paid_total_cents || 0);
+      counts[group] += 1;
+    });
+    const total = Object.values(totals).reduce((sum, value) => sum + value, 0);
+    const dateLabel = new Date(dateValue + 'T12:00:00').toLocaleDateString('pt-BR');
+    const rows = [
+      ['Dinheiro', totals.cash, counts.cash],
+      ['Cartão', totals.card, counts.card],
+      ['Pix', totals.pix, counts.pix]
+    ];
+    if (totals.other > 0) rows.push(['Outras formas', totals.other, counts.other]);
+    const paymentRows = rows.map(([label, cents, count]) =>
+      '<tr><td>' + escapeHTML(label) + '</td><td>' + count + '</td><td>' + escapeHTML(formatMoneyCents(cents)) + '</td></tr>'
+    ).join('');
+    popup.document.open();
+    popup.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fechamento de Caixa - ${dateLabel}</title><style>
+      *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#171717;margin:0;padding:28px}
+      .receipt{max-width:620px;margin:0 auto}.brand{text-align:center;font-size:20px;font-weight:800;margin-bottom:4px}
+      h1{text-align:center;font-size:19px;margin:18px 0 4px}.date{text-align:center;color:#555;margin-bottom:22px}
+      table{width:100%;border-collapse:collapse}th,td{padding:12px 8px;border-bottom:1px solid #ddd;text-align:left}
+      th:last-child,td:last-child{text-align:right}th:nth-child(2),td:nth-child(2){text-align:center}
+      .total{display:flex;justify-content:space-between;gap:12px;font-size:20px;font-weight:800;padding:18px 8px;border-top:2px solid #222;margin-top:12px}
+      .meta{font-size:12px;color:#555;text-align:center;margin-top:20px}
+      .actions{text-align:center;margin-top:24px}.actions button{padding:12px 22px;border:0;border-radius:8px;background:#b5121b;color:white;font-weight:700}
+      @media print{body{padding:0}.actions{display:none}.receipt{max-width:none}}
+    </style></head><body><main class="receipt">
+      <div class="brand">SABOR DO CHEF</div><h1>FECHAMENTO DE CAIXA</h1><div class="date">${dateLabel}</div>
+      <table><thead><tr><th>Forma de pagamento</th><th>Vendas</th><th>Valor</th></tr></thead><tbody>${paymentRows}</tbody></table>
+      <div class="total"><span>TOTAL DO DIA</span><span>${formatMoneyCents(total)}</span></div>
+      <div class="meta">Pedidos concluídos e contas do Salão fechadas.<br>Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+      <div class="actions"><button onclick="window.print()">Imprimir fechamento</button></div>
+    </main></body></html>`);
+    popup.document.close();
+    showMessage('cashCloseMessage', 'Fechamento calculado: ' + formatMoneyCents(total) + '. Use a opção Imprimir na folha aberta.', 'success');
+  } catch (error) {
+    popup.close();
+    showMessage('cashCloseMessage', 'Não foi possível gerar o fechamento: ' + (error.message || error), 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+const cashCloseToday = new Date();
+$('cashCloseDate').value = localDateKey(cashCloseToday);
+$('printCashCloseBtn').addEventListener('click', printDailyCashClose);
 
 async function printerAdminRequest(body) {
   const { data, error } = await supabase.functions.invoke('printer-device-api', { body });
