@@ -1702,69 +1702,17 @@ function cashPaymentGroup(method) {
 }
 
 async function printDailyCashClose() {
-  const popup = window.open('', '_blank');
-  if (!popup) {
-    showMessage('cashCloseMessage', 'Permita pop-ups para este painel e tente novamente.', 'error');
-    return;
-  }
   const button = $('printCashCloseBtn');
   button.disabled = true;
-  showMessage('cashCloseMessage', 'Calculando o fechamento do caixa...');
+  showMessage('cashCloseMessage', 'Enviando fechamento diário para a fila da impressora...');
   try {
     const dateValue = $('cashCloseDate').value;
     if (!dateValue) throw new Error('Selecione a data do fechamento.');
-    const { startIso, endIso } = cashCloseLocalDateRange(dateValue);
-    const [orders, tabs] = await Promise.all([
-      fetchAllRowsForCashClose('orders', 'order_number,order_type,payment_method,total_cents,created_at', startIso, endIso, 'created_at'),
-      fetchAllRowsForCashClose('dining_tabs', 'id,payment_method,paid_total_cents,closed_at', startIso, endIso, 'closed_at')
-    ]);
-
-    const totals = { cash: 0, card: 0, pix: 0, other: 0 };
-    const counts = { cash: 0, card: 0, pix: 0, other: 0 };
-    orders.forEach(order => {
-      const group = cashPaymentGroup(order.payment_method);
-      totals[group] += Number(order.total_cents || 0);
-      counts[group] += 1;
-    });
-    tabs.forEach(tab => {
-      const group = cashPaymentGroup(tab.payment_method);
-      totals[group] += Number(tab.paid_total_cents || 0);
-      counts[group] += 1;
-    });
-    const total = Object.values(totals).reduce((sum, value) => sum + value, 0);
-    const dateLabel = new Date(dateValue + 'T12:00:00').toLocaleDateString('pt-BR');
-    const rows = [
-      ['Dinheiro', totals.cash, counts.cash],
-      ['Cartão', totals.card, counts.card],
-      ['Pix', totals.pix, counts.pix]
-    ];
-    if (totals.other > 0) rows.push(['Outras formas', totals.other, counts.other]);
-    const paymentRows = rows.map(([label, cents, count]) =>
-      '<tr><td>' + escapeHTML(label) + '</td><td>' + count + '</td><td>' + escapeHTML(formatMoneyCents(cents)) + '</td></tr>'
-    ).join('');
-    popup.document.open();
-    popup.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fechamento de Caixa - ${dateLabel}</title><style>
-      *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#171717;margin:0;padding:28px}
-      .receipt{max-width:620px;margin:0 auto}.brand{text-align:center;font-size:20px;font-weight:800;margin-bottom:4px}
-      h1{text-align:center;font-size:19px;margin:18px 0 4px}.date{text-align:center;color:#555;margin-bottom:22px}
-      table{width:100%;border-collapse:collapse}th,td{padding:12px 8px;border-bottom:1px solid #ddd;text-align:left}
-      th:last-child,td:last-child{text-align:right}th:nth-child(2),td:nth-child(2){text-align:center}
-      .total{display:flex;justify-content:space-between;gap:12px;font-size:20px;font-weight:800;padding:18px 8px;border-top:2px solid #222;margin-top:12px}
-      .meta{font-size:12px;color:#555;text-align:center;margin-top:20px}
-      .actions{text-align:center;margin-top:24px}.actions button{padding:12px 22px;border:0;border-radius:8px;background:#b5121b;color:white;font-weight:700}
-      @media print{body{padding:0}.actions{display:none}.receipt{max-width:none}}
-    </style></head><body><main class="receipt">
-      <div class="brand">SABOR DO CHEF</div><h1>FECHAMENTO DE CAIXA</h1><div class="date">${dateLabel}</div>
-      <table><thead><tr><th>Forma de pagamento</th><th>Vendas</th><th>Valor</th></tr></thead><tbody>${paymentRows}</tbody></table>
-      <div class="total"><span>TOTAL DO DIA</span><span>${formatMoneyCents(total)}</span></div>
-      <div class="meta">Pedidos concluídos e contas do Salão fechadas.<br>Gerado em ${new Date().toLocaleString('pt-BR')}</div>
-      <div class="actions"><button onclick="window.print()">Imprimir fechamento</button></div>
-    </main></body></html>`);
-    popup.document.close();
-    showMessage('cashCloseMessage', 'Fechamento calculado: ' + formatMoneyCents(total) + '. Use a opção Imprimir na folha aberta.', 'success');
+    const result = await printerAdminRequest({ action: 'admin_daily_close', report_date: dateValue });
+    if (!result?.queued) throw new Error('O fechamento não foi confirmado na fila.');
+    showMessage('cashCloseMessage', 'Fechamento de ' + new Date(dateValue + 'T12:00:00').toLocaleDateString('pt-BR') + ' enviado para a fila da central Android. A impressora emitirá Salão, Delivery e Retirada, com totais por dinheiro, Pix e cartão.', 'success');
   } catch (error) {
-    popup.close();
-    showMessage('cashCloseMessage', 'Não foi possível gerar o fechamento: ' + (error.message || error), 'error');
+    showMessage('cashCloseMessage', 'Não foi possível enviar o fechamento para impressão: ' + (error.message || error), 'error');
   } finally {
     button.disabled = false;
   }
