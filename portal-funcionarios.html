@@ -262,15 +262,16 @@ async function loadSalonOverview(selectedTableId=null){
     const categoryButtons='<button type="button" class="active" data-category="all">Todas</button>'+categories.map(c=>'<button type="button" data-category="'+c.id+'">'+safe(c.name)+'</button>').join('');
     $('roleContent').innerHTML=
       '<div class="salon-screen-nav"><button type="button" class="secondary" id="salonBackTables">← Todas as mesas</button><button type="button" class="secondary" id="salonShowTab">Ver comanda · '+money(total)+'</button></div>'+
+      '<div id="'+rootId+'" data-salon-composer="'+tab.id+'" data-table-id="'+table.id+'" data-table-number="'+safe(table.table_number)+'">'+
       '<section class="card salon-menu-screen" id="salonMenuScreen"><h2>Cardápio · Mesa '+safe(table.table_number)+'</h2><p class="muted">Escolha os produtos como no cardápio do cliente. O pedido será adicionado diretamente à comanda aberta.</p>'+
-      '<div class="salon-composer" id="'+rootId+'" data-salon-composer="'+tab.id+'" data-table-id="'+table.id+'" data-table-number="'+safe(table.table_number)+'"><div class="salon-categories">'+categoryButtons+'</div><div class="salon-products"></div></div></section>'+
+      '<div class="salon-categories">'+categoryButtons+'</div><div class="salon-products"></div></section>'+
       '<section class="card salon-cart-screen hidden" id="salonCartScreen"><div class="salon-screen-nav"><button type="button" class="secondary salon-cart-back">← Voltar ao cardápio</button><strong>Mesa '+safe(table.table_number)+'</strong></div><div class="salon-cart"></div></section>'+
       '<section class="card hidden" id="salonTabScreen"><div class="salon-screen-nav"><button type="button" class="secondary" id="salonTabBack">← Voltar ao cardápio</button><strong>Comanda · Mesa '+safe(table.table_number)+'</strong></div><div class="top"><strong>Total acumulado</strong><strong>'+money(total)+'</strong></div>'+historyHtml(tabOrders)+'<label>Forma de pagamento na saída</label><select id="salonPayment"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button class="danger full" id="salonCloseTab">Fechar conta e liberar mesa</button></section>'+
-      '<button type="button" class="primary salon-cart-open hidden">Carrinho</button>';
+      '<button type="button" class="primary salon-cart-open hidden">Carrinho</button></div>';
     const root=$(rootId);
     bindSalonComposer(root,tab.id,products,categories,accompByProduct);
     $('salonBackTables').addEventListener('click',()=>loadSalonOverview());
-    $('salonShowTab').addEventListener('click',()=>{$('salonMenuScreen').classList.add('hidden');$('salonCartScreen').classList.add('hidden');$('salonTabScreen').classList.remove('hidden');$('salon-cart-open')?.classList.add('hidden');});
+    $('salonShowTab').addEventListener('click',()=>{$('salonMenuScreen').classList.add('hidden');$('salonCartScreen').classList.add('hidden');$('salonTabScreen').classList.remove('hidden');$('roleContent').querySelector('.salon-cart-open')?.classList.add('hidden');});
     $('salonTabBack').addEventListener('click',()=>{$('salonTabScreen').classList.add('hidden');$('salonMenuScreen').classList.remove('hidden');});
     $('salonCloseTab').addEventListener('click',async()=>{
       const payment=$('salonPayment').value;
