@@ -426,7 +426,7 @@ $('checkout').onsubmit=async e=>{
    '🔗 *Peça novamente pelo nosso cardápio:*',
    'https://cardapiosabordochef.com.br'
   ].filter(Boolean).join('\n');
-  $('success-whatsapp').href='https://wa.me/?text='+encodeURIComponent(whatsappMessage);
+  $('success-whatsapp').href='https://wa.me/5521984912563?text='+encodeURIComponent(whatsappMessage);
   cart.clear();drawCart();$('checkout').reset();document.querySelectorAll('input[name="order-type"]').forEach(input=>input.checked=false);$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);updateReceiveFields();
   document.body.classList.remove('order-screen','customer-screen');
   document.body.classList.add('success-screen');
