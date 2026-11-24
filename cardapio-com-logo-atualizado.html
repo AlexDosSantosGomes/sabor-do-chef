@@ -157,7 +157,7 @@ body.customer-screen #success-screen{display:none}
 <div class="receive-step"><h2>Como deseja receber seu pedido?</h2><div class="receive-options" role="radiogroup" aria-label="Modalidade de recebimento">
 <label class="receive-option"><input type="radio" name="order-type" value="DELIVERY" required><span><strong>ENTREGA</strong><small>Receber no endereço informado. Entrega grátis.</small></span></label>
 <label class="receive-option"><input type="radio" name="order-type" value="PICKUP" required><span><strong>RETIRADA NO LOCAL</strong><small>Buscar o pedido diretamente na pensão. Sem taxa.</small></span></label>
-</div><button type="button" class="btn submit" id="continue-customer">Continuar</button></div></aside></div></main>
+</div></div></aside></div></main>
 <div id="message" class="message" role="status" aria-live="polite"></div>
 <section id="customer-screen" aria-labelledby="customer-screen-title"><form id="checkout"><div class="customer-card"><button type="button" class="btn secondary" id="back-receive">← Voltar</button><h2 id="customer-screen-title">Seus dados</h2><p class="small" id="customer-mode-label">Preencha os dados para finalizar seu pedido.</p>
 <label for="customer-name">Nome</label><input id="customer-name" maxlength="100" required autocomplete="name" placeholder="Seu nome">
@@ -347,7 +347,6 @@ $('go-cart').onclick=openOrderScreen;
 $('added-view-cart').onclick=()=>{if(addedFeedbackTimer)clearTimeout(addedFeedbackTimer);$('added-feedback').classList.remove('visible');openOrderScreen()};
 $('back-menu').onclick=closeOrderScreen;
 function openCustomerScreen(){const selected=document.querySelector('input[name="order-type"]:checked')?.value||'';if(!cart.size){message('Adicione produtos ao carrinho.');return}if(!selected){message('Escolha ENTREGA ou RETIRADA NO LOCAL.');return}document.body.classList.remove('order-screen');document.body.classList.add('customer-screen');$('customer-mode-label').textContent=selected==='PICKUP'?'Modalidade: RETIRADA NO LOCAL · Sem taxa e sem endereço.':'Modalidade: ENTREGA · Frete grátis.';updateReceiveFields();window.scrollTo({top:0,behavior:'smooth'})}
-$('continue-customer').onclick=openCustomerScreen;
 $('back-receive').onclick=()=>{document.body.classList.remove('customer-screen');document.body.classList.add('order-screen');window.scrollTo({top:0,behavior:'smooth'})};
 function cents(s){const n=Number(String(s).trim().replace(/\./g,'').replace(',','.'));return Number.isFinite(n)&&n>0?Math.round(n*100):null}
 function updateReceiveFields(){
@@ -359,7 +358,7 @@ function updateReceiveFields(){
  payment.options[2].text=selected==='PICKUP'?'Cartão na retirada':'Cartão na entrega';
  $('submit').textContent=selected==='PICKUP'?'Confirmar retirada':'Confirmar pedido';
 }
-document.querySelectorAll('input[name="order-type"]').forEach(input=>input.addEventListener('change',updateReceiveFields));
+document.querySelectorAll('input[name="order-type"]').forEach(input=>input.addEventListener('change',()=>{updateReceiveFields();openCustomerScreen()}));
 updateReceiveFields();
 $('checkout').onsubmit=async e=>{
  e.preventDefault();$('message').className='message';
