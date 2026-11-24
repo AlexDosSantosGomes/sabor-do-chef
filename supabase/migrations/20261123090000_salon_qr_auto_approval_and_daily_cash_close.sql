@@ -6,14 +6,14 @@ alter table public.orders add constraint orders_order_source_check
   check (order_source in ('CLIENT_QR','STAFF'));
 
 create or replace function public.mark_salon_order_source()
-returns trigger language plpgsql security definer set search_path=public,pg_temp as $
+returns trigger language plpgsql security definer set search_path=public,pg_temp as $source$
 begin
   if new.order_type='SALAO'::public.order_type then
     new.order_source := case when auth.uid() is null then 'CLIENT_QR' else 'STAFF' end;
   end if;
   return new;
 end;
-$;
+$source$;
 drop trigger if exists orders_mark_salon_source on public.orders;
 create trigger orders_mark_salon_source before insert on public.orders
 for each row execute function public.mark_salon_order_source();
