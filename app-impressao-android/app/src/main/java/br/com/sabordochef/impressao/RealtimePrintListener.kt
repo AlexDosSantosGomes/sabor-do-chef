@@ -45,14 +45,23 @@ class RealtimePrintListener(
      * net for dropped broadcasts or a socket that appears connected but is stale.
      * On timeout, the worker checks the authenticated queue again.
      */
-    fun awaitSignal(timeoutMs: Long = 30_000L): Boolean {
-        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+    fun awaitSignal(timeoutMs: Long = 0L): Boolean {
+        // timeoutMs <= 0 means wait only for an actual Realtime/lifecycle signal.
+        // A positive timeout is reserved for bounded recovery while disconnected
+        // or for a scheduled retry returned by the print API.
+        val deadline = if (timeoutMs > 0L)
+            System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        else Long.MAX_VALUE
         synchronized(monitor) {
             while (active && !signalPending) {
-                val remainingNanos = deadline - System.nanoTime()
-                if (remainingNanos <= 0L) break
-                val waitMs = TimeUnit.NANOSECONDS.toMillis(remainingNanos).coerceAtLeast(1L)
-                monitor.wait(waitMs)
+                if (timeoutMs <= 0L) {
+                    monitor.wait()
+                } else {
+                    val remainingNanos = deadline - System.nanoTime()
+                    if (remainingNanos <= 0L) break
+                    val waitMs = TimeUnit.NANOSECONDS.toMillis(remainingNanos).coerceAtLeast(1L)
+                    monitor.wait(waitMs)
+                }
             }
             val received = signalPending
             signalPending = false
