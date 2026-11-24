@@ -1,5 +1,5 @@
 name: Build Android printing APK
-# Rebuild with the corrected v0.4.3 artifact label.
+# Build the isolated Salon and daily cash close test APK v0.4.4.
 
 on:
   workflow_dispatch:
@@ -9,6 +9,7 @@ on:
       - atualizacao/fila-impressao-ptbr-v0-2
       - feature/modulo-salao
       - fix/realtime-wakeup-recovery
+      - feature/salao-fechamento-apk-otimizacao
     paths:
       - "app-impressao-android/**"
       - ".github/workflows/build-android-print-apk.yml"
@@ -53,7 +54,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: sabor-do-chef-impressao-v0.4.3
+          name: sabor-do-chef-impressao-v0.4.4-salao-caixa
           path: app-impressao-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

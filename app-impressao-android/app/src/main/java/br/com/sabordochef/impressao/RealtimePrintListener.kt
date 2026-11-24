@@ -1,5 +1,6 @@
 package br.com.sabordochef.impressao
 
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -22,6 +23,8 @@ class RealtimePrintListener(
     // Latch a wake-up that arrives between the queue check and awaitSignal().
     private var signalPending = false
     @Volatile private var active = false
+    @Volatile var isConnected: Boolean = false
+        private set
     @Volatile private var socket: WebSocket? = null
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -37,19 +40,28 @@ class RealtimePrintListener(
     }
 
     /**
-     * Wait for a Realtime wake-up, but never block forever.
-     * The pending latch closes the check-to-wait race; the timeout is a safety
-     * net for dropped broadcasts or a socket that appears connected but is stale.
-     * On timeout, the worker checks the authenticated queue again.
+     * Wait for a Realtime/lifecycle wake-up. While connected and idle, this
+     * intentionally waits without periodic database checks. The pending latch
+     * closes the check-to-wait race. Positive timeouts are used only for
+     * bounded disconnected recovery or a server-scheduled retry.
      */
-    fun awaitSignal(timeoutMs: Long = 30_000L): Boolean {
-        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+    fun awaitSignal(timeoutMs: Long = 0L): Boolean {
+        // timeoutMs <= 0 means wait only for an actual Realtime/lifecycle signal.
+        // A positive timeout is reserved for bounded recovery while disconnected
+        // or for a scheduled retry returned by the print API.
+        val deadline = if (timeoutMs > 0L)
+            System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        else Long.MAX_VALUE
         synchronized(monitor) {
             while (active && !signalPending) {
-                val remainingNanos = deadline - System.nanoTime()
-                if (remainingNanos <= 0L) break
-                val waitMs = TimeUnit.NANOSECONDS.toMillis(remainingNanos).coerceAtLeast(1L)
-                monitor.wait(waitMs)
+                if (timeoutMs <= 0L) {
+                    monitor.wait()
+                } else {
+                    val remainingNanos = deadline - System.nanoTime()
+                    if (remainingNanos <= 0L) break
+                    val waitMs = TimeUnit.NANOSECONDS.toMillis(remainingNanos).coerceAtLeast(1L)
+                    monitor.wait(waitMs)
+                }
             }
             val received = signalPending
             signalPending = false
@@ -101,13 +113,18 @@ class RealtimePrintListener(
                                     val status = message.optJSONObject("payload")?.optString("status")
                                     if (status == "ok" && !joinOk.getAndSet(true)) {
                                         joined.countDown()
+                                        isConnected = true
+                                        Log.i(TAG, "Supabase Realtime conectado")
                                         delayMs = 1000L
                                         signal()
                                     } else if (status == "error") closed.countDown()
                                 }
                                 "broadcast" -> {
                                     val payload = message.optJSONObject("payload")
-                                    if (payload?.optString("event") == "queue_changed") signal()
+                                    if (payload?.optString("event") == "queue_changed") {
+                                        Log.i(TAG, "Evento Realtime: fila de impressão atualizada")
+                                        signal()
+                                    }
                                 }
                                 "phx_error", "phx_close" -> closed.countDown()
                             }
@@ -115,11 +132,16 @@ class RealtimePrintListener(
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        isConnected = false
+                        Log.w(TAG, "WebSocket Realtime desconectado: ${t.message}")
+                        signal()
                         joined.countDown()
                         closed.countDown()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        isConnected = false
+                        signal()
                         joined.countDown()
                         closed.countDown()
                     }
@@ -153,6 +175,8 @@ class RealtimePrintListener(
             } finally {
                 try { heartbeat?.interrupt() } catch (_: Exception) { }
                 socket = null
+                isConnected = false
+                signal()
                 delayMs = (delayMs * 2).coerceAtMost(60000L)
             }
             if (active) try { Thread.sleep(delayMs) } catch (_: InterruptedException) { break }
@@ -161,6 +185,7 @@ class RealtimePrintListener(
 
     fun close() {
         active = false
+        isConnected = false
         synchronized(monitor) { monitor.notifyAll() }
         try { socket?.close(1000, "service stopped") } catch (_: Exception) { }
         socket = null
@@ -169,6 +194,7 @@ class RealtimePrintListener(
     }
 
     companion object {
+        private const val TAG = "SaborChefRealtime"
         private const val REALTIME_URL = "wss://enakuleybfvzqurrttwl.supabase.co/realtime/v1/websocket"
         private const val PUBLISHABLE_KEY = "sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA"
         private const val TOPIC = "realtime:printer-queue"

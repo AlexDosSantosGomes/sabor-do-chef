@@ -22,11 +22,20 @@ function randomToken() {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+async function requeuePrintJob(db: ReturnType<typeof createClient>, jobId: string, message: string) {
+  const retryAt = new Date(Date.now() + 15000).toISOString();
+  const { error } = await db.from("print_jobs").update({
+    status: "PENDENTE", claimed_at: null, device_id: null,
+    next_attempt_at: retryAt, last_error: message
+  }).eq("id", jobId).eq("status", "PROCESSANDO");
+  return !error;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return reply({ error: "Método não permitido" }, 405);
 
-  let body: { action?: string; job_id?: string; order_id?: string; error?: string; name?: string } = {};
+  let body: { action?: string; job_id?: string; order_id?: string; error?: string; name?: string; report_date?: string } = {};
   try { body = await req.json(); } catch { return reply({ error: "JSON inválido" }, 400); }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -34,7 +43,7 @@ Deno.serve(async (req: Request) => {
   if (!supabaseUrl || !serviceKey) return reply({ error: "Configuração do servidor ausente" }, 500);
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  if (body.action === "admin_pair" || body.action === "admin_status" || body.action === "admin_reprint") {
+  if (body.action === "admin_pair" || body.action === "admin_status" || body.action === "admin_reprint" || body.action === "admin_daily_close") {
     const authHeader = req.headers.get("authorization") ?? "";
     const jwt = authHeader.replace(/^Bearer\s+/i, "");
     if (!jwt) return reply({ error: "Entre novamente no painel administrativo." }, 401);
@@ -43,6 +52,24 @@ Deno.serve(async (req: Request) => {
     const { data: profile, error: profileError } = await db.from("admin_profiles")
       .select("is_active").eq("user_id", authData.user.id).maybeSingle();
     if (profileError || profile?.is_active !== true) return reply({ error: "Acesso restrito ao administrador ativo." }, 403);
+
+    if (body.action === "admin_daily_close") {
+      const reportDate = String(body.report_date ?? "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) return reply({ error: "Informe uma data válida para o fechamento." }, 400);
+      const parsedDate = new Date(reportDate + "T12:00:00-03:00");
+      if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== reportDate) return reply({ error: "Data inválida para o fechamento." }, 400);
+      const { data: existing, error: existingError } = await db.from("print_jobs").select("id,status").eq("job_type", "DAILY_CLOSE").eq("report_date", reportDate).maybeSingle();
+      if (existingError) return reply({ error: "Não foi possível verificar o fechamento já solicitado." }, 500);
+      if (existing?.status === "PROCESSANDO") return reply({ error: "Este fechamento já está sendo impresso." }, 409);
+      if (existing) {
+        const { error: requeueError } = await db.from("print_jobs").update({ status: "PENDENTE", attempt_count: 0, last_error: null, printed_at: null, claimed_at: null, device_id: null, next_attempt_at: new Date().toISOString() }).eq("id", existing.id);
+        if (requeueError) return reply({ error: "Não foi possível recolocar o fechamento na fila." }, 500);
+      } else {
+        const { error: queueError } = await db.from("print_jobs").insert({ job_type: "DAILY_CLOSE", report_date: reportDate, status: "PENDENTE", attempt_count: 0, next_attempt_at: new Date().toISOString() });
+        if (queueError) return reply({ error: "Não foi possível criar a tarefa de fechamento." }, 500);
+      }
+      return reply({ ok: true, queued: true, report_date: reportDate });
+    }
 
     if (body.action === "admin_reprint") {
       if (!body.order_id) return reply({ error: "Pedido não informado para reimpressão." }, 400);
@@ -53,8 +80,14 @@ Deno.serve(async (req: Request) => {
       if (!["DELIVERY", "PICKUP", "SALAO"].includes(order.order_type) || order.status === "CANCELADO") {
         return reply({ error: "Este pedido não pode ser reimpresso." }, 409);
       }
-      const { error: queueError } = await db.from("print_jobs").upsert({
-        order_id: order.id,
+      const { data: existingJob, error: existingJobError } = await db.from("print_jobs")
+        .select("id,status").eq("order_id", order.id).maybeSingle();
+      if (existingJobError) return reply({ error: "Não foi possível verificar a tarefa de impressão atual." }, 500);
+      if (existingJob?.status === "PROCESSANDO") {
+        return reply({ error: "Este pedido já está sendo impresso. Aguarde a conclusão antes de solicitar outra via." }, 409);
+      }
+
+      const queuePayload = {
         status: "PENDENTE",
         attempt_count: 0,
         last_error: null,
@@ -62,8 +95,18 @@ Deno.serve(async (req: Request) => {
         claimed_at: null,
         device_id: null,
         next_attempt_at: new Date().toISOString()
-      }, { onConflict: "order_id" });
-      if (queueError) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+      };
+      if (existingJob) {
+        const { data: requeued, error: queueError } = await db.from("print_jobs")
+          .update(queuePayload).eq("id", existingJob.id).neq("status", "PROCESSANDO")
+          .select("id").maybeSingle();
+        if (queueError) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+        if (!requeued) return reply({ error: "Este pedido já está sendo impresso. Aguarde a conclusão antes de solicitar outra via." }, 409);
+      } else {
+        const { error: queueError } = await db.from("print_jobs")
+          .insert({ ...queuePayload, order_id: order.id });
+        if (queueError) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+      }
       return reply({ ok: true, queued: true });
     }
 
@@ -128,7 +171,7 @@ Deno.serve(async (req: Request) => {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: candidate, error } = await db.from("print_jobs")
-        .select("id, order_id, dining_tab_id, job_type, attempt_count")
+        .select("id, order_id, dining_tab_id, job_type, report_date, attempt_count")
         .eq("status", "PENDENTE")
         .lte("next_attempt_at", nowIso)
         .order("next_attempt_at", { ascending: true })
@@ -136,7 +179,19 @@ Deno.serve(async (req: Request) => {
         .limit(1)
         .maybeSingle();
       if (error) return reply({ error: "Não foi possível consultar a fila." }, 500);
-      if (!candidate) return reply({ job: null });
+      if (!candidate) {
+        // Se há tarefas agendadas para retry, informa o próximo horário ao APK.
+        // Assim o aparelho dorme até o vencimento, sem polling periódico nem retry perdido.
+        const { data: nextPending, error: nextError } = await db.from("print_jobs")
+          .select("next_attempt_at")
+          .eq("status", "PENDENTE")
+          .gt("next_attempt_at", nowIso)
+          .order("next_attempt_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (nextError) return reply({ error: "Não foi possível consultar o próximo retry." }, 500);
+        return reply({ job: null, retry_at: nextPending?.next_attempt_at ?? null });
+      }
 
       const claimedAt = new Date().toISOString();
       const { data: claimed, error: claimError } = await db.from("print_jobs")
@@ -155,28 +210,58 @@ Deno.serve(async (req: Request) => {
       if (claimError) return reply({ error: "Não foi possível reservar o pedido." }, 500);
       if (!claimed) continue;
 
+      if (claimed.job_type === "DAILY_CLOSE") {
+        const reportDate = String(candidate.report_date ?? "");
+        const start = new Date(reportDate + "T00:00:00-03:00");
+        const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+        if (!reportDate || Number.isNaN(start.getTime())) {
+          await db.from("print_jobs").update({ status: "PENDENTE", claimed_at: null, device_id: null, next_attempt_at: new Date(Date.now() + 60000).toISOString(), last_error: "Data do fechamento inválida." }).eq("id", claimed.id);
+          return reply({ error: "Data do fechamento inválida." }, 500);
+        }
+        const [ordersResult, tabsResult] = await Promise.all([
+          db.from("orders").select("order_number,order_type,payment_method,total_cents,created_at").eq("status", "ENTREGUE").in("order_type", ["DELIVERY", "PICKUP"]).gte("created_at", start.toISOString()).lt("created_at", end.toISOString()).order("created_at", { ascending: true }),
+          db.from("dining_tabs").select("payment_method,paid_total_cents,closed_at,restaurant_tables(table_number)").eq("status", "CLOSED").gte("closed_at", start.toISOString()).lt("closed_at", end.toISOString()).order("closed_at", { ascending: true })
+        ]);
+        if (ordersResult.error || tabsResult.error) {
+          await db.from("print_jobs").update({ status: "PENDENTE", claimed_at: null, device_id: null, next_attempt_at: new Date(Date.now() + 30000).toISOString(), last_error: "Falha ao consultar as vendas do fechamento diário." }).eq("id", claimed.id);
+          return reply({ error: "Não foi possível calcular as vendas do dia." }, 500);
+        }
+        const deliveryAndPickup = (ordersResult.data ?? []).map((sale: any) => ({ source: sale.order_type === "PICKUP" ? "RETIRADA" : "DELIVERY", order_number: sale.order_number, total_cents: sale.total_cents ?? 0, payment_method: sale.payment_method, created_at: sale.created_at }));
+        const salon = (tabsResult.data ?? []).map((tab: any) => ({ source: "SALAO", table_number: tab.restaurant_tables?.table_number ?? "N/I", total_cents: tab.paid_total_cents ?? 0, payment_method: tab.payment_method, created_at: tab.closed_at }));
+        const sales = [...deliveryAndPickup, ...salon].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        const totals = { cash: 0, pix: 0, card: 0, other: 0 };
+        const counts = { cash: 0, pix: 0, card: 0, other: 0 };
+        for (const sale of sales) {
+          const method = String(sale.payment_method ?? "").trim().toUpperCase();
+          const key = ["CASH", "DINHEIRO"].includes(method) ? "cash" : method === "PIX" ? "pix" : ["CARD", "CARTAO", "CARTÃO", "CREDIT_CARD", "DEBIT_CARD", "CARTAO_CREDITO", "CARTAO_DEBITO"].includes(method) ? "card" : "other";
+          totals[key as keyof typeof totals] += Number(sale.total_cents || 0);
+          counts[key as keyof typeof counts] += 1;
+        }
+        return reply({ job: { id: claimed.id, job_type: "DAILY_CLOSE", attempt_count: claimed.attempt_count, report: { report_date: reportDate, sales, totals, counts } } });
+      }
+
       if (claimed.job_type === "TAB_CLOSE") {
         const { data: tab, error: tabError } = await db.from("dining_tabs")
           .select("id, table_id, paid_total_cents, payment_method, closed_at")
           .eq("id", claimed.dining_tab_id).maybeSingle();
-        if (tabError || !tab) return reply({ error: "Comanda fechada não encontrada." }, 500);
+        if (tabError || !tab) { await requeuePrintJob(db, claimed.id, "Comanda não encontrada; nova tentativa programada."); return reply({ error: "Comanda fechada não encontrada." }, 500); }
         const { data: table, error: tableError } = await db.from("restaurant_tables")
           .select("table_number").eq("id", tab.table_id).maybeSingle();
-        if (tableError || !table) return reply({ error: "Mesa não encontrada." }, 500);
+        if (tableError || !table) { await requeuePrintJob(db, claimed.id, "Mesa não encontrada; nova tentativa programada."); return reply({ error: "Mesa não encontrada." }, 500); }
         const { data: orders, error: ordersError } = await db.from("orders")
           .select("id, order_number, total_cents, customer_notes, created_at")
           .eq("dining_tab_id", tab.id).neq("status", "CANCELADO").order("created_at", { ascending: true });
-        if (ordersError) return reply({ error: "Não foi possível carregar os pedidos da comanda." }, 500);
+        if (ordersError) { await requeuePrintJob(db, claimed.id, "Falha ao carregar pedidos da comanda; nova tentativa programada."); return reply({ error: "Não foi possível carregar os pedidos da comanda." }, 500); }
         const orderIds = (orders ?? []).map((o: { id: string }) => o.id);
         const { data: items, error: itemsError } = orderIds.length
           ? await db.from("order_items").select("id, order_id, product_name_snapshot, unit_price_cents, quantity, notes").in("order_id", orderIds)
           : { data: [], error: null };
-        if (itemsError) return reply({ error: "Não foi possível carregar os itens da comanda." }, 500);
+        if (itemsError) { await requeuePrintJob(db, claimed.id, "Falha ao carregar itens da comanda; nova tentativa programada."); return reply({ error: "Não foi possível carregar os itens da comanda." }, 500); }
         const itemIds = (items ?? []).map((i: { id: string }) => i.id);
         const { data: accompaniments, error: accError } = itemIds.length
           ? await db.from("order_item_accompaniments").select("order_item_id, accompaniment_name, unit_index").in("order_item_id", itemIds)
           : { data: [], error: null };
-        if (accError) return reply({ error: "Não foi possível carregar os acompanhamentos." }, 500);
+        if (accError) { await requeuePrintJob(db, claimed.id, "Falha ao carregar acompanhamentos da comanda; nova tentativa programada."); return reply({ error: "Não foi possível carregar os acompanhamentos." }, 500); }
         const order = { order_type: "TAB_CLOSE", table_number: table.table_number,
           total_cents: tab.paid_total_cents ?? 0, payment_method: tab.payment_method,
           created_at: tab.closed_at, order_count: orders?.length ?? 0 };

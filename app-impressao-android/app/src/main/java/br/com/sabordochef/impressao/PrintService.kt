@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -54,6 +55,7 @@ class PrintService : Service() {
         worker?.interrupt()
         realtimeListener?.close()
         realtimeListener = null
+        BluetoothPrinter.close()
         cpuWakeLock?.let { if (it.isHeld) it.release() }
         cpuWakeLock = null
         super.onDestroy()
@@ -75,8 +77,7 @@ class PrintService : Service() {
                 val prefs = getSharedPreferences("printer_config", MODE_PRIVATE)
                 val pendingAckId = prefs.getString("pending_ack_job_id", null)
                 if (!pendingAckId.isNullOrBlank()) {
-                    if (confirmSentJob(token, pendingAckId)) Thread.sleep(1500)
-                    else Thread.sleep(8000)
+                    if (!confirmSentJob(token, pendingAckId)) Thread.sleep(8000)
                     continue
                 }
 
@@ -85,17 +86,39 @@ class PrintService : Service() {
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
-                    // Realtime is the primary wake-up. A bounded wait guarantees
-                    // the queue is rechecked even if a broadcast is dropped.
-                    realtimeListener?.awaitSignal(30_000L) ?: Thread.sleep(30_000L)
+                    // While Realtime is healthy, wait for its next event instead of polling.
+                    // If the socket is down, perform a bounded recovery check until it reconnects.
+                    val retryAt = response.optString("retry_at").takeIf { it.isNotBlank() && it != "null" }
+                    val retryDelayMs = retryAt?.let {
+                        try {
+                            (java.time.Instant.parse(it).toEpochMilli() - System.currentTimeMillis()).coerceAtLeast(1000L)
+                        } catch (_: Exception) { 30_000L }
+                    }
+                    val realtimeHealthy = realtimeListener?.isConnected == true
+                    // Healthy Realtime: no periodic queue polling; wait for a real event,
+                    // a connection/reconnection signal, or a scheduled server retry.
+                    // Disconnected: bounded 15s recovery checks until Realtime returns.
+                    val waitMs = if (realtimeHealthy) {
+                        retryDelayMs ?: 0L // zero means wait indefinitely for a signal
+                    } else {
+                        retryDelayMs?.coerceAtMost(15_000L) ?: 15_000L
+                    }
+                    if (realtimeListener != null) realtimeListener?.awaitSignal(waitMs)
+                    else Thread.sleep(if (waitMs > 0L) waitMs else 15_000L)
                     continue
                 }
 
                 val jobId = job.getString("id")
+                val receivedAt = System.currentTimeMillis()
+                Log.i(TAG, "Tarefa recebida: $jobId tipo=${job.optString("job_type")} tentativa=${job.optInt("attempt_count")}")
                 try {
                     val bytes = buildTickets(job)
+                    val bluetoothStartedAt = System.currentTimeMillis()
+                    Log.i(TAG, "Iniciando Bluetooth para $jobId após ${bluetoothStartedAt - receivedAt} ms na preparação")
                     BluetoothPrinter.sendEscPos(this, bytes)
+                    Log.i(TAG, "Envio à impressora concluído para $jobId em ${System.currentTimeMillis() - bluetoothStartedAt} ms")
                 } catch (printError: Exception) {
+                    Log.e(TAG, "Falha ao imprimir tarefa $jobId", printError)
                     try {
                         api(token, JSONObject()
                             .put("action", "fail")
@@ -110,8 +133,7 @@ class PrintService : Service() {
                 // Salva o ACK antes de qualquer nova busca. Se a internet cair após o envio,
                 // o APK confirma a tarefa sem mandar a mesma nota novamente.
                 prefs.edit().putString("pending_ack_job_id", jobId).apply()
-                if (confirmSentJob(token, jobId)) Thread.sleep(1500)
-                else Thread.sleep(8000)
+                if (!confirmSentJob(token, jobId)) Thread.sleep(8000)
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
             } catch (e: Exception) {
@@ -125,7 +147,9 @@ class PrintService : Service() {
 
     private fun confirmSentJob(token: String, jobId: String): Boolean {
         return try {
+            val ackStartedAt = System.currentTimeMillis()
             api(token, JSONObject().put("action", "complete").put("job_id", jobId))
+            Log.i(TAG, "Confirmação do painel concluída para $jobId em ${System.currentTimeMillis() - ackStartedAt} ms")
             getSharedPreferences("printer_config", MODE_PRIVATE)
                 .edit().remove("pending_ack_job_id").apply()
             updateNotification("Pedido enviado à impressora e registrado no painel")
@@ -159,6 +183,7 @@ class PrintService : Service() {
     }
 
     private fun buildTickets(job: JSONObject): ByteArray {
+        if (job.optString("job_type") == "DAILY_CLOSE") return buildDailyCashCloseTicket(job)
         val order = job.getJSONObject("order")
         val items = job.optJSONArray("items")
         val accompaniments = job.optJSONArray("accompaniments")
@@ -256,6 +281,61 @@ class PrintService : Service() {
         return out.toByteArray()
     }
 
+
+    private fun buildDailyCashCloseTicket(job: JSONObject): ByteArray {
+        val report = job.optJSONObject("report") ?: JSONObject()
+        val reportDate = report.optString("report_date", "Data não informada")
+        val sales = report.optJSONArray("sales")
+        val totals = report.optJSONObject("totals") ?: JSONObject()
+        val counts = report.optJSONObject("counts") ?: JSONObject()
+        val amountFormat = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply { minimumFractionDigits = 2; maximumFractionDigits = 2 }
+        fun brl(cents: Int) = "R$ " + amountFormat.format(cents / 100.0)
+        fun method(value: String): String = when (value.uppercase(Locale.ROOT)) {
+            "CASH", "DINHEIRO" -> "DINHEIRO"
+            "PIX" -> "PIX"
+            "CARD", "CARTAO", "CARTÃO", "CREDIT_CARD", "DEBIT_CARD", "CARTAO_CREDITO", "CARTAO_DEBITO" -> "CARTAO"
+            else -> "OUTROS"
+        }
+        val total = totals.optInt("cash", 0) + totals.optInt("pix", 0) + totals.optInt("card", 0) + totals.optInt("other", 0)
+        val ticket = buildString {
+            append("SABOR DO CHEF\n")
+            append("================================\n")
+            append("FECHAMENTO DIARIO DO CAIXA\n")
+            append("DATA: ").append(reportDate.split("-").reversed().joinToString("/")).append("\n")
+            append("================================\n")
+            append("RESUMO POR PAGAMENTO\n")
+            append("DINHEIRO: ").append(brl(totals.optInt("cash", 0))).append(" (").append(counts.optInt("cash", 0)).append(" vendas)\n")
+            append("PIX: ").append(brl(totals.optInt("pix", 0))).append(" (").append(counts.optInt("pix", 0)).append(" vendas)\n")
+            append("CARTAO: ").append(brl(totals.optInt("card", 0))).append(" (").append(counts.optInt("card", 0)).append(" vendas)\n")
+            if (totals.optInt("other", 0) > 0) append("OUTROS: ").append(brl(totals.optInt("other", 0))).append("\n")
+            append("--------------------------------\n")
+            append("TOTAL GERAL: ").append(brl(total)).append("\n")
+            append("--------------------------------\n")
+            append("VENDAS DO DIA\n")
+            if (sales == null || sales.length() == 0) append("Nenhuma venda concluida.\n")
+            else for (i in 0 until sales.length()) {
+                val sale = sales.getJSONObject(i)
+                val source = sale.optString("source", "VENDA")
+                val reference = if (source == "SALAO") "MESA " + sale.optString("table_number", "N/I") else "PEDIDO #" + sale.optString("order_number", "N/I")
+                append(source).append(" - ").append(reference).append("\n")
+                append("  ").append(brl(sale.optInt("total_cents", 0))).append(" - ").append(method(sale.optString("payment_method"))).append("\n")
+            }
+            append("--------------------------------\n")
+            append("VENDAS: ").append(sales?.length() ?: 0).append("\n")
+            append("FECHAMENTO CONSOLIDADO\n")
+            append("SABOR DO CHEF\n\n\n")
+        }
+        val out = java.io.ByteArrayOutputStream()
+        out.write(PrinterText.initialize())
+        out.write(byteArrayOf(0x1B, 0x61, 0x01))
+        out.write(byteArrayOf(0x1D, 0x21, 0x11))
+        out.write(PrinterText.encode("FECHAMENTO DE CAIXA\n"))
+        out.write(byteArrayOf(0x1D, 0x21, 0x00))
+        out.write(byteArrayOf(0x1B, 0x61, 0x00))
+        out.write(PrinterText.encode(ticket))
+        out.write(byteArrayOf(0x1D, 0x56, 0x00))
+        return out.toByteArray()
+    }
 
     private fun buildDiningTabCloseTicket(
         order: JSONObject,
@@ -480,6 +560,7 @@ class PrintService : Service() {
             .build()
 
     companion object {
+        private const val TAG = "SaborChefPrint"
         private const val API_URL = "https://enakuleybfvzqurrttwl.supabase.co/functions/v1/printer-device-api"
         private const val CHANNEL_ID = "sabor_do_chef_print_service"
         private const val NOTIFICATION_ID = 4107
