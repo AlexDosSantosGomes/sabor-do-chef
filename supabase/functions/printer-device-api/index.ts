@@ -80,8 +80,14 @@ Deno.serve(async (req: Request) => {
       if (!["DELIVERY", "PICKUP", "SALAO"].includes(order.order_type) || order.status === "CANCELADO") {
         return reply({ error: "Este pedido não pode ser reimpresso." }, 409);
       }
-      const { error: queueError } = await db.from("print_jobs").upsert({
-        order_id: order.id,
+      const { data: existingJob, error: existingJobError } = await db.from("print_jobs")
+        .select("id,status").eq("order_id", order.id).maybeSingle();
+      if (existingJobError) return reply({ error: "Não foi possível verificar a tarefa de impressão atual." }, 500);
+      if (existingJob?.status === "PROCESSANDO") {
+        return reply({ error: "Este pedido já está sendo impresso. Aguarde a conclusão antes de solicitar outra via." }, 409);
+      }
+
+      const queuePayload = {
         status: "PENDENTE",
         attempt_count: 0,
         last_error: null,
@@ -89,8 +95,11 @@ Deno.serve(async (req: Request) => {
         claimed_at: null,
         device_id: null,
         next_attempt_at: new Date().toISOString()
-      }, { onConflict: "order_id" });
-      if (queueError) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+      };
+      const queueResult = existingJob
+        ? await db.from("print_jobs").update(queuePayload).eq("id", existingJob.id)
+        : await db.from("print_jobs").insert({ ...queuePayload, order_id: order.id });
+      if (queueResult.error) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
       return reply({ ok: true, queued: true });
     }
 
