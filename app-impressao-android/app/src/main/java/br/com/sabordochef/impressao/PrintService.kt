@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -54,6 +55,7 @@ class PrintService : Service() {
         worker?.interrupt()
         realtimeListener?.close()
         realtimeListener = null
+        BluetoothPrinter.close()
         cpuWakeLock?.let { if (it.isHeld) it.release() }
         cpuWakeLock = null
         super.onDestroy()
@@ -93,10 +95,16 @@ class PrintService : Service() {
                 }
 
                 val jobId = job.getString("id")
+                val receivedAt = System.currentTimeMillis()
+                Log.i(TAG, "Tarefa recebida: $jobId tipo=${job.optString("job_type")} tentativa=${job.optInt("attempt_count")}")
                 try {
                     val bytes = buildTickets(job)
+                    val bluetoothStartedAt = System.currentTimeMillis()
+                    Log.i(TAG, "Iniciando Bluetooth para $jobId após ${bluetoothStartedAt - receivedAt} ms na preparação")
                     BluetoothPrinter.sendEscPos(this, bytes)
+                    Log.i(TAG, "Envio à impressora concluído para $jobId em ${System.currentTimeMillis() - bluetoothStartedAt} ms")
                 } catch (printError: Exception) {
+                    Log.e(TAG, "Falha ao imprimir tarefa $jobId", printError)
                     try {
                         api(token, JSONObject()
                             .put("action", "fail")
@@ -125,7 +133,9 @@ class PrintService : Service() {
 
     private fun confirmSentJob(token: String, jobId: String): Boolean {
         return try {
+            val ackStartedAt = System.currentTimeMillis()
             api(token, JSONObject().put("action", "complete").put("job_id", jobId))
+            Log.i(TAG, "Confirmação do painel concluída para $jobId em ${System.currentTimeMillis() - ackStartedAt} ms")
             getSharedPreferences("printer_config", MODE_PRIVATE)
                 .edit().remove("pending_ack_job_id").apply()
             updateNotification("Pedido enviado à impressora e registrado no painel")
@@ -536,6 +546,7 @@ class PrintService : Service() {
             .build()
 
     companion object {
+        private const val TAG = "SaborChefPrint"
         private const val API_URL = "https://enakuleybfvzqurrttwl.supabase.co/functions/v1/printer-device-api"
         private const val CHANNEL_ID = "sabor_do_chef_print_service"
         private const val NOTIFICATION_ID = 4107
