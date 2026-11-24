@@ -90,7 +90,7 @@ $('sendOrder').addEventListener('click',async()=>{
  $('sendOrder').disabled=false;$('sendOrder').textContent='Enviar pedido para a mesa';
  if(error){alert(error.message);return;}
  $('successText').textContent='Pedido #'+data.order_number+' · Mesa '+data.table_number+' · Total: '+money(data.total_cents);
- $('successItems').innerHTML='<strong>Produtos solicitados</strong><ul>'+rows.map(x=>'<li>'+x.units.length+'x '+esc(x.product.name)+' — '+money(x.product.price_cents*x.units.length)+'</li>').join('')+'</ul>';
+ $('successItems').innerHTML='<strong>Produtos solicitados</strong><ul>'+rows.map(x=>'<li>'+x.units.length+'x '+esc(x.product.name)+' — '+money(x.product.price_cents*x.units.length)+(isQuentinha(x.product)?x.units.map((s,i)=>s.length?'<div class="unit-detail">Quentinha '+(i+1)+': '+s.map(esc).join(', ')+'</div>':'').join(''):'')+'</li>').join('')+'</ul>';
  $('success').classList.remove('hidden');$('cartSection').classList.add('hidden');cart.clear();$('notes').value='';
 });
 $('continue').addEventListener('click',()=>{$('success').classList.add('hidden');$('menuSection').scrollIntoView({behavior:'smooth'});});
