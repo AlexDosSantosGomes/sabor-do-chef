@@ -67,7 +67,7 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 .salon-table-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .salon-table-tile{border:0;border-radius:16px;padding:16px;text-align:left;min-height:150px;color:#fff;box-shadow:0 6px 18px #20263818}
 .salon-table-tile.busy{background:linear-gradient(145deg,#8f1018,#c51d27)}
-.salon-table-tile.free{background:linear-gradient(145deg,#13783d,#20a45a)}
+.salon-table-tile.free{background:linear-gradient(145deg,#13783d,#20a45a)}.salon-table-tile.inactive{background:linear-gradient(145deg,#626875,#858b96);opacity:.82;cursor:not-allowed}
 .salon-table-tile .big{font-size:36px;line-height:1;font-weight:950;display:block;margin-bottom:12px}
 .salon-table-tile .meta{display:block;font-size:12px;margin-top:5px;opacity:.96}
 .salon-screen-nav{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
@@ -161,9 +161,10 @@ async function loadSalonOverview(){
     const activeOrders=tabOrders.filter(o=>o.status!=='CANCELADO');
     const total=activeOrders.reduce((sum,o)=>sum+Number(o.total_cents||0),0);
     const qrNew=activeOrders.filter(o=>o.order_source==='CLIENT_QR'&&['APROVADO','ENVIADO_IMPRESSAO','FALHA_IMPRESSAO'].includes(o.status)).length;
-    return '<button type="button" class="salon-table-tile '+(tab?'busy':'free')+'" data-table="'+t.id+'"><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+(tab?'EM USO':'LIVRE')+'</span>'+
-      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+activeOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>':'<span class="meta">Disponível para receber clientes</span>')+
-      '<span class="meta">'+(tab?'Toque para abrir a mesa':'Toque para abrir comanda')+'</span></button>';
+    const inactive=!t.active;
+    return '<button type="button" class="salon-table-tile '+(tab?'busy':inactive?'inactive':'free')+'" data-table="'+t.id+'" '+(inactive&&!tab?'disabled':'')+'><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+(tab?'EM USO':inactive?'INATIVA':'LIVRE')+'</span>'+
+      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+activeOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>':inactive?'<span class="meta">Mesa desativada no cadastro</span>':'<span class="meta">Disponível para receber clientes</span>')+
+      '<span class="meta">'+(tab?'Toque para abrir a mesa':inactive?'':'Toque para abrir comanda')+'</span></button>';
   }).join('');
   $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Mesas em ordem numérica · Vermelho: em uso · Verde: livre</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div>';
   $('refreshSalon').addEventListener('click',()=>loadSalonOverview());
