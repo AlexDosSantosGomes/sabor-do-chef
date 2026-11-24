@@ -22,6 +22,8 @@ class RealtimePrintListener(
     // Latch a wake-up that arrives between the queue check and awaitSignal().
     private var signalPending = false
     @Volatile private var active = false
+    @Volatile var isConnected: Boolean = false
+        private set
     @Volatile private var socket: WebSocket? = null
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -101,6 +103,7 @@ class RealtimePrintListener(
                                     val status = message.optJSONObject("payload")?.optString("status")
                                     if (status == "ok" && !joinOk.getAndSet(true)) {
                                         joined.countDown()
+                                        isConnected = true
                                         delayMs = 1000L
                                         signal()
                                     } else if (status == "error") closed.countDown()
@@ -115,11 +118,15 @@ class RealtimePrintListener(
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        isConnected = false
+                        signal()
                         joined.countDown()
                         closed.countDown()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        isConnected = false
+                        signal()
                         joined.countDown()
                         closed.countDown()
                     }
@@ -153,6 +160,8 @@ class RealtimePrintListener(
             } finally {
                 try { heartbeat?.interrupt() } catch (_: Exception) { }
                 socket = null
+                isConnected = false
+                signal()
                 delayMs = (delayMs * 2).coerceAtMost(60000L)
             }
             if (active) try { Thread.sleep(delayMs) } catch (_: InterruptedException) { break }
@@ -161,6 +170,7 @@ class RealtimePrintListener(
 
     fun close() {
         active = false
+        isConnected = false
         synchronized(monitor) { monitor.notifyAll() }
         try { socket?.close(1000, "service stopped") } catch (_: Exception) { }
         socket = null
