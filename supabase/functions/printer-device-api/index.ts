@@ -96,10 +96,15 @@ Deno.serve(async (req: Request) => {
         device_id: null,
         next_attempt_at: new Date().toISOString()
       };
-      const queueResult = existingJob
-        ? await db.from("print_jobs").update(queuePayload).eq("id", existingJob.id)
-        : await db.from("print_jobs").insert({ ...queuePayload, order_id: order.id });
-      if (queueResult.error) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+      if (existingJob) {
+        const { error: queueError } = await db.from("print_jobs")
+          .update(queuePayload).eq("id", existingJob.id);
+        if (queueError) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+      } else {
+        const { error: queueError } = await db.from("print_jobs")
+          .insert({ ...queuePayload, order_id: order.id });
+        if (queueError) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+      }
       return reply({ ok: true, queued: true });
     }
 
