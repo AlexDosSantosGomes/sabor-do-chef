@@ -352,8 +352,7 @@ $('back-receive').onclick=()=>{document.body.classList.remove('customer-screen')
 function cents(s){const n=Number(String(s).trim().replace(/\./g,'').replace(',','.'));return Number.isFinite(n)&&n>0?Math.round(n*100):null}
 function updateReceiveFields(){
  const selected=document.querySelector('input[name="order-type"]:checked')?.value||'';
- $('customer-fields').classList.toggle('hidden',!selected);
- $('delivery-address-field').classList.toggle('hidden',selected!=='DELIVERY');
+  $('delivery-address-field').classList.toggle('hidden',selected!=='DELIVERY');
  $('address').required=selected==='DELIVERY';
  const payment=$('payment');
  payment.options[1].text=selected==='PICKUP'?'Pix na retirada':'Pix na entrega';
@@ -430,7 +429,7 @@ $('checkout').onsubmit=async e=>{
   ].filter(Boolean).join('\n');
   $('success-whatsapp').href='https://wa.me/?text='+encodeURIComponent(whatsappMessage);
   cart.clear();drawCart();$('checkout').reset();document.querySelectorAll('input[name="order-type"]').forEach(input=>input.checked=false);$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);updateReceiveFields();
-  document.body.classList.remove('order-screen');
+  document.body.classList.remove('order-screen','customer-screen');
   document.body.classList.add('success-screen');
   window.scrollTo({top:0,behavior:'smooth'});
   await load();
