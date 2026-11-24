@@ -124,6 +124,9 @@ async function initEmployeeMode(){
     $('employeeLiveNotice').classList.remove('hidden');
    }
   })
+  .on('postgres_changes',{event:'UPDATE',schema:'public',table:'dining_tabs',filter:'id=eq.'+employeeTabId},payload=>{
+   if(payload.new?.status!=='OPEN'){alert('Esta comanda foi encerrada em outro aparelho.');location.href='./portal-funcionarios.html';}
+  })
   .subscribe();
 }
 async function loadEmployeeBill(){
