@@ -17,6 +17,13 @@ $source$;
 drop trigger if exists orders_mark_salon_source on public.orders;
 create trigger orders_mark_salon_source before insert on public.orders
 for each row execute function public.mark_salon_order_source();
+
+-- Garante que pedidos SALAO aprovados no INSERT entrem na mesma fila do APK.
+-- O índice único por order_id protege contra duplicidade caso já exista trigger legado.
+drop trigger if exists orders_enqueue_print_job_auto on public.orders;
+create trigger orders_enqueue_print_job_auto
+after insert or update of status on public.orders
+for each row execute function public.enqueue_delivery_print_job();
 create or replace function public.create_salon_qr_order(
   p_qr_token uuid,
   p_items jsonb,
