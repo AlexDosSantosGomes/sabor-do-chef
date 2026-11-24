@@ -312,13 +312,17 @@ async function loadSalonOverview(selectedTableId=null){
   $('refreshSalon').addEventListener('click',()=>loadSalonOverview());
   $('roleContent').querySelectorAll('[data-table]').forEach(btn=>btn.addEventListener('click',async()=>{
     const table=tables.find(t=>t.id===btn.dataset.table);if(!table)return;
-    const tab=openByTable.get(table.id);
-    if(tab){await loadSalonOverview(table.id);return;}
-    if(!table.active){alert('Esta mesa está inativa.');return;}
-    btn.disabled=true;
-    const {error}=await supabase.rpc('open_dining_tab',{p_table_id:table.id});
-    if(error){alert(error.message);btn.disabled=false;return;}
-    await loadSalonOverview();
+    let tab=openByTable.get(table.id);
+    if(!tab){
+      if(!table.active){alert('Esta mesa está inativa.');return;}
+      btn.disabled=true;
+      const {error}=await supabase.rpc('open_dining_tab',{p_table_id:table.id});
+      if(error){alert(error.message);btn.disabled=false;return;}
+      const {data:opened,error:openError}=await supabase.from('dining_tabs').select('id').eq('table_id',table.id).eq('status','OPEN').maybeSingle();
+      if(openError||!opened){alert(openError?.message||'Não foi possível localizar a comanda aberta.');await loadSalonOverview();return;}
+      tab=opened;
+    }
+    location.href='./pedido-salao.html?funcionario=1&tab='+encodeURIComponent(tab.id);
   }));
 }
 async function loadDeliveryOrders(){
