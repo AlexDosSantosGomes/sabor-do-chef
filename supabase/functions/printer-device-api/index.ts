@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return reply({ error: "Método não permitido" }, 405);
 
-  let body: { action?: string; job_id?: string; order_id?: string; error?: string; name?: string } = {};
+  let body: { action?: string; job_id?: string; order_id?: string; error?: string; name?: string; report_date?: string } = {};
   try { body = await req.json(); } catch { return reply({ error: "JSON inválido" }, 400); }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -34,7 +34,7 @@ Deno.serve(async (req: Request) => {
   if (!supabaseUrl || !serviceKey) return reply({ error: "Configuração do servidor ausente" }, 500);
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  if (body.action === "admin_pair" || body.action === "admin_status" || body.action === "admin_reprint") {
+  if (body.action === "admin_pair" || body.action === "admin_status" || body.action === "admin_reprint" || body.action === "admin_daily_close") {
     const authHeader = req.headers.get("authorization") ?? "";
     const jwt = authHeader.replace(/^Bearer\s+/i, "");
     if (!jwt) return reply({ error: "Entre novamente no painel administrativo." }, 401);
@@ -43,6 +43,24 @@ Deno.serve(async (req: Request) => {
     const { data: profile, error: profileError } = await db.from("admin_profiles")
       .select("is_active").eq("user_id", authData.user.id).maybeSingle();
     if (profileError || profile?.is_active !== true) return reply({ error: "Acesso restrito ao administrador ativo." }, 403);
+
+    if (body.action === "admin_daily_close") {
+      const reportDate = String(body.report_date ?? "");
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(reportDate)) return reply({ error: "Informe uma data válida para o fechamento." }, 400);
+      const parsedDate = new Date(reportDate + "T12:00:00-03:00");
+      if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== reportDate) return reply({ error: "Data inválida para o fechamento." }, 400);
+      const { data: existing, error: existingError } = await db.from("print_jobs").select("id,status").eq("job_type", "DAILY_CLOSE").eq("report_date", reportDate).maybeSingle();
+      if (existingError) return reply({ error: "Não foi possível verificar o fechamento já solicitado." }, 500);
+      if (existing?.status === "PROCESSANDO") return reply({ error: "Este fechamento já está sendo impresso." }, 409);
+      if (existing) {
+        const { error: requeueError } = await db.from("print_jobs").update({ status: "PENDENTE", attempt_count: 0, last_error: null, printed_at: null, claimed_at: null, device_id: null, next_attempt_at: new Date().toISOString() }).eq("id", existing.id);
+        if (requeueError) return reply({ error: "Não foi possível recolocar o fechamento na fila." }, 500);
+      } else {
+        const { error: queueError } = await db.from("print_jobs").insert({ job_type: "DAILY_CLOSE", report_date: reportDate, status: "PENDENTE", attempt_count: 0, next_attempt_at: new Date().toISOString() });
+        if (queueError) return reply({ error: "Não foi possível criar a tarefa de fechamento." }, 500);
+      }
+      return reply({ ok: true, queued: true, report_date: reportDate });
+    }
 
     if (body.action === "admin_reprint") {
       if (!body.order_id) return reply({ error: "Pedido não informado para reimpressão." }, 400);
@@ -128,7 +146,7 @@ Deno.serve(async (req: Request) => {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: candidate, error } = await db.from("print_jobs")
-        .select("id, order_id, dining_tab_id, job_type, attempt_count")
+        .select("id, order_id, dining_tab_id, job_type, report_date, attempt_count")
         .eq("status", "PENDENTE")
         .lte("next_attempt_at", nowIso)
         .order("next_attempt_at", { ascending: true })
@@ -154,6 +172,36 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       if (claimError) return reply({ error: "Não foi possível reservar o pedido." }, 500);
       if (!claimed) continue;
+
+      if (claimed.job_type === "DAILY_CLOSE") {
+        const reportDate = String(candidate.report_date ?? "");
+        const start = new Date(reportDate + "T00:00:00-03:00");
+        const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+        if (!reportDate || Number.isNaN(start.getTime())) {
+          await db.from("print_jobs").update({ status: "FALHA", claimed_at: null, device_id: null, last_error: "Data do fechamento inválida." }).eq("id", claimed.id);
+          return reply({ error: "Data do fechamento inválida." }, 500);
+        }
+        const [ordersResult, tabsResult] = await Promise.all([
+          db.from("orders").select("order_number,order_type,payment_method,total_cents,created_at").eq("status", "ENTREGUE").in("order_type", ["DELIVERY", "PICKUP"]).gte("created_at", start.toISOString()).lt("created_at", end.toISOString()).order("created_at", { ascending: true }),
+          db.from("dining_tabs").select("payment_method,paid_total_cents,closed_at,restaurant_tables(table_number)").eq("status", "CLOSED").gte("closed_at", start.toISOString()).lt("closed_at", end.toISOString()).order("closed_at", { ascending: true })
+        ]);
+        if (ordersResult.error || tabsResult.error) {
+          await db.from("print_jobs").update({ status: "PENDENTE", claimed_at: null, device_id: null, next_attempt_at: new Date(Date.now() + 30000).toISOString(), last_error: "Falha ao consultar as vendas do fechamento diário." }).eq("id", claimed.id);
+          return reply({ error: "Não foi possível calcular as vendas do dia." }, 500);
+        }
+        const deliveryAndPickup = (ordersResult.data ?? []).map((sale: any) => ({ source: sale.order_type === "PICKUP" ? "RETIRADA" : "DELIVERY", order_number: sale.order_number, total_cents: sale.total_cents ?? 0, payment_method: sale.payment_method, created_at: sale.created_at }));
+        const salon = (tabsResult.data ?? []).map((tab: any) => ({ source: "SALAO", table_number: tab.restaurant_tables?.table_number ?? "N/I", total_cents: tab.paid_total_cents ?? 0, payment_method: tab.payment_method, created_at: tab.closed_at }));
+        const sales = [...deliveryAndPickup, ...salon].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        const totals = { cash: 0, pix: 0, card: 0, other: 0 };
+        const counts = { cash: 0, pix: 0, card: 0, other: 0 };
+        for (const sale of sales) {
+          const method = String(sale.payment_method ?? "").trim().toUpperCase();
+          const key = ["CASH", "DINHEIRO"].includes(method) ? "cash" : method === "PIX" ? "pix" : ["CARD", "CARTAO", "CARTÃO", "CREDIT_CARD", "DEBIT_CARD", "CARTAO_CREDITO", "CARTAO_DEBITO"].includes(method) ? "card" : "other";
+          totals[key as keyof typeof totals] += Number(sale.total_cents || 0);
+          counts[key as keyof typeof counts] += 1;
+        }
+        return reply({ job: { id: claimed.id, job_type: "DAILY_CLOSE", attempt_count: claimed.attempt_count, report: { report_date: reportDate, sales, totals, counts } } });
+      }
 
       if (claimed.job_type === "TAB_CLOSE") {
         const { data: tab, error: tabError } = await db.from("dining_tabs")
