@@ -178,7 +178,7 @@ Deno.serve(async (req: Request) => {
         const start = new Date(reportDate + "T00:00:00-03:00");
         const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
         if (!reportDate || Number.isNaN(start.getTime())) {
-          await db.from("print_jobs").update({ status: "FALHA", claimed_at: null, device_id: null, last_error: "Data do fechamento inválida." }).eq("id", claimed.id);
+          await db.from("print_jobs").update({ status: "PENDENTE", claimed_at: null, device_id: null, next_attempt_at: new Date(Date.now() + 60000).toISOString(), last_error: "Data do fechamento inválida." }).eq("id", claimed.id);
           return reply({ error: "Data do fechamento inválida." }, 500);
         }
         const [ordersResult, tabsResult] = await Promise.all([
