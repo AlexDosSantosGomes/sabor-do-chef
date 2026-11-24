@@ -13,7 +13,7 @@ begin
   end if;
   return new;
 end;
-$source$;
+$source$$;
 -- Trigger-only function: callers must not invoke it through the Data API.
 revoke all on function public.mark_salon_order_source() from public, anon, authenticated;
 drop trigger if exists orders_mark_salon_source on public.orders;
