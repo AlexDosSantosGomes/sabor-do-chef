@@ -159,6 +159,8 @@ function bindSalonComposer(root,tabId,products,categories,accompByProduct){
  root.querySelector('.salon-products')?.addEventListener('click',e=>{
   const b=e.target.closest('.salon-product-add');if(!b)return;
   const product=productMap.get(b.dataset.product);if(!product)return;
+  const already=cart.items.get(product.id)?.units.length||0;
+  if(already>=Number(product.stock_quantity||0)){alert('Limite de estoque atingido para este produto.');return;}
   if(!cart.items.has(product.id))cart.items.set(product.id,{product,units:[],notes:''});
   cart.items.get(product.id).units.push([]);
   root.dataset.feedback=product.name+' adicionado ao carrinho.';
@@ -272,7 +274,12 @@ async function loadSalonOverview(selectedTableId=null){
     bindSalonComposer(root,tab.id,products,categories,accompByProduct);
     $('salonBackTables').addEventListener('click',()=>loadSalonOverview());
     $('salonShowTab').addEventListener('click',()=>{$('salonMenuScreen').classList.add('hidden');$('salonCartScreen').classList.add('hidden');$('salonTabScreen').classList.remove('hidden');$('roleContent').querySelector('.salon-cart-open')?.classList.add('hidden');});
-    $('salonTabBack').addEventListener('click',()=>{$('salonTabScreen').classList.add('hidden');$('salonMenuScreen').classList.remove('hidden');});
+    $('salonTabBack').addEventListener('click',()=>{
+      $('salonTabScreen').classList.add('hidden');$('salonMenuScreen').classList.remove('hidden');
+      const currentCart=salonCartFor(tab.id);
+      const itemCount=[...currentCart.items.values()].reduce((n,item)=>n+item.units.length,0);
+      $('roleContent').querySelector('.salon-cart-open')?.classList.toggle('hidden',itemCount===0);
+    });
     $('salonCloseTab').addEventListener('click',async()=>{
       const payment=$('salonPayment').value;
       if(!confirm('Confirma o recebimento em '+payment+' e o fechamento da conta da Mesa '+table.table_number+'?'))return;
@@ -289,10 +296,10 @@ async function loadSalonOverview(selectedTableId=null){
   const cards=tables.map(t=>{
     const tab=openByTable.get(t.id),tabOrders=tab?(ordersByTab.get(tab.id)||[]):[];
     const total=tabOrders.filter(o=>o.status!=='CANCELADO').reduce((sum,o)=>sum+Number(o.total_cents||0),0);
-    const qrNew=tabOrders.filter(o=>o.order_source==='CLIENT_QR'&&o.status!=='CANCELADO').length;
+    const qrNew=tabOrders.filter(o=>o.order_source==='CLIENT_QR'&&['APROVADO','ENVIADO_IMPRESSAO','FALHA_IMPRESSAO'].includes(o.status)).length;
     const status=tab?'EM USO':'LIVRE';
     return '<button type="button" class="salon-table-tile '+(tab?'busy':'free')+'" data-table="'+t.id+'"><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+status+'</span>'+
-      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+tabOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' via QR Code':'')+'</span>':'<span class="meta">Disponível para receber clientes</span>')+
+      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+tabOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>':'<span class="meta">Disponível para receber clientes</span>')+
       '<span class="meta">'+(tab?'Toque para abrir a mesa':'Toque para abrir comanda')+'</span></button>';
   }).join('');
   $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Mesas em ordem numérica · Vermelho: em uso · Verde: livre</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div>';
