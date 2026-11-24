@@ -1152,8 +1152,9 @@ async function loadDeliveryOrders() {
     const change = order.needs_change
       ? `<div><strong>Cliente paga com:</strong> ${money(changeAmount)}</div><div><strong>Troco a devolver:</strong> ${money(changeDue)}</div>`
       : '';
+    const isSalon = order.order_type === 'SALAO';
     const isPickup = order.order_type === 'PICKUP';
-    const modalityLabel = isPickup ? 'RETIRADA NO LOCAL' : 'ENTREGA';
+    const modalityLabel = isSalon ? 'SALÃO' : (isPickup ? 'RETIRADA NO LOCAL' : 'ENTREGA');
     const isPending = ['RECEBIDO', 'AGUARDANDO_APROVACAO'].includes(order.status);
     const rejection = order.status === 'CANCELADO' && order.cancellation_reason
       ? `<div class="message error"><strong>Motivo da recusa:</strong> ${escapeHTML(order.cancellation_reason)}</div>`
