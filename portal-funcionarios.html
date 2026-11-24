@@ -124,121 +124,26 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
 const $=id=>document.getElementById(id);
-const salonCarts=new Map();
-let activeSalonTableId=null;
-let salonRealtimeChannel=null;
 const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const normalizeText=v=>String(v||'').toLowerCase().trim();
-function isQuentinha(p){return normalizeText(p.category_name||'').includes('quentinha')}
-function salonCartFor(tabId){if(!salonCarts.has(tabId))salonCarts.set(tabId,{items:new Map(),category:'all',notes:''});return salonCarts.get(tabId)}
-function renderSalonProducts(root,cart,products,categories){
- const grid=root.querySelector('.salon-products');if(!grid)return;
- const visible=products.filter(p=>cart.category==='all'||p.category_id===cart.category);
- grid.innerHTML=visible.map(p=>'<article class="salon-product">'+(p.photo_url?'<img loading="lazy" src="'+safe(p.photo_url)+'" alt="'+safe(p.name)+'">':'<div style="height:88px;background:#f1f2f5"></div>')+'<div class="salon-product-info"><div class="salon-product-name">'+safe(p.name)+'</div><div class="salon-product-description">'+safe(p.description||'')+'</div><div class="salon-product-price">'+money(p.price_cents)+'</div><button class="primary salon-product-add" data-product="'+p.id+'">Adicionar +</button></div></article>').join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>';
- root.querySelectorAll('.salon-categories button').forEach(b=>b.classList.toggle('active',b.dataset.category===cart.category));
-}
-function renderSalonCart(root,tabId,cart,products,accompByProduct){
- const box=root.querySelector('.salon-cart');if(!box)return;
- const count=[...cart.items.values()].reduce((n,x)=>n+x.units.length,0);
- const lines=[...cart.items.values()].map(item=>{
-  const sideOptions=accompByProduct.get(item.product.id)||[];
-  const units=item.units.map((chosen,index)=>isQuentinha(item.product)?'<div class="salon-unit"><strong>Quentinha '+(index+1)+'</strong><div class="salon-sides">'+(sideOptions.map(a=>'<label><input type="checkbox" data-side-product="'+item.product.id+'" data-unit="'+index+'" data-side="'+safe(a.name)+'" '+(chosen.includes(a.name)?'checked':'')+' '+(chosen.length>=2&&!chosen.includes(a.name)?'disabled':'')+'> '+safe(a.name)+'</label>').join('')||'<span class="muted">Sem acompanhamentos ativos.</span>')+'</div><small class="muted">'+chosen.length+'/2 acompanhamentos</small></div>':'').join('');
-  return '<div class="salon-cart-line"><div class="top"><strong>'+safe(item.product.name)+'</strong><strong>'+item.units.length+' × '+money(item.product.price_cents)+'</strong></div><div class="actions"><button class="secondary salon-cart-adjust" data-product="'+item.product.id+'" data-delta="-1">−</button><button class="secondary salon-cart-adjust" data-product="'+item.product.id+'" data-delta="1">+</button><button class="danger salon-cart-remove" data-product="'+item.product.id+'">Remover</button></div>'+units+'<label>Observação deste item</label><input class="salon-item-note" data-product="'+item.product.id+'" maxlength="200" value="'+safe(item.notes||'')+'" placeholder="Ex.: sem cebola"></div>';
- }).join('');
- const total=[...cart.items.values()].reduce((sum,item)=>sum+item.product.price_cents*item.units.length,0);
- box.innerHTML='<div class="top"><strong>Revisar pedido <span class="salon-cart-count">('+count+' item(ns))</span></strong><strong>'+money(total)+'</strong></div>'+(lines||'<p class="muted">Adicione produtos para montar o pedido.</p>')+'<label>Observação geral do pedido</label><textarea class="salon-cart-notes" rows="2" maxlength="300" placeholder="Observação para a cozinha">'+safe(cart.notes)+'</textarea><div class="salon-feedback" aria-live="polite">'+safe(root.dataset.feedback||'')+'</div><button class="primary full salon-submit" '+(!count?'disabled':'')+'>CONFIRMAR PEDIDO PARA ESTA MESA</button>';
- const opener=root.querySelector('.salon-cart-open');
- if(opener){opener.classList.toggle('hidden',count===0);opener.textContent='Carrinho · '+count+' item(ns) · '+money(total);}
-}
-function bindSalonComposer(root,tabId,products,categories,accompByProduct){
- const cart=salonCartFor(tabId);
- const productMap=new Map(products.map(p=>[p.id,p]));
- root.querySelector('.salon-categories')?.addEventListener('click',e=>{
-  const b=e.target.closest('button[data-category]');if(!b)return;cart.category=b.dataset.category;renderSalonProducts(root,cart,products,categories);
- });
- root.querySelector('.salon-products')?.addEventListener('click',e=>{
-  const b=e.target.closest('.salon-product-add');if(!b)return;
-  const product=productMap.get(b.dataset.product);if(!product)return;
-  const already=cart.items.get(product.id)?.units.length||0;
-  if(already>=Number(product.stock_quantity||0)){alert('Limite de estoque atingido para este produto.');return;}
-  if(!cart.items.has(product.id))cart.items.set(product.id,{product,units:[],notes:''});
-  cart.items.get(product.id).units.push([]);
-  root.dataset.feedback=product.name+' adicionado ao carrinho.';
-  renderSalonCart(root,tabId,cart,products,accompByProduct);
- });
- root.querySelector('.salon-cart-open')?.addEventListener('click',()=>{
-  root.querySelector('.salon-menu-screen')?.classList.add('hidden');
-  root.querySelector('.salon-cart-screen')?.classList.remove('hidden');
- });
- root.querySelector('.salon-cart-back')?.addEventListener('click',()=>{
-  root.querySelector('.salon-cart-screen')?.classList.add('hidden');
-  root.querySelector('.salon-menu-screen')?.classList.remove('hidden');
- });
- root.querySelector('.salon-cart')?.addEventListener('click',async e=>{
-  const adjust=e.target.closest('.salon-cart-adjust'),remove=e.target.closest('.salon-cart-remove');
-  if(adjust){const item=cart.items.get(adjust.dataset.product);if(!item)return;const delta=Number(adjust.dataset.delta);if(delta>0){if(item.units.length>=Number(item.product.stock_quantity||0)){alert('Limite de estoque atingido para este produto.');return;}item.units.push([]);}else item.units.pop();if(!item.units.length)cart.items.delete(adjust.dataset.product);renderSalonCart(root,tabId,cart,products,accompByProduct);return;}
-  if(remove){cart.items.delete(remove.dataset.product);renderSalonCart(root,tabId,cart,products,accompByProduct);return;}
-  if(e.target.closest('.salon-submit')){
-   const count=[...cart.items.values()].reduce((n,x)=>n+x.units.length,0);if(!count)return;
-   const btn=e.target.closest('.salon-submit');btn.disabled=true;btn.textContent='Enviando pedido...';
-   const payload=[...cart.items.values()].map(x=>({product_id:x.product.id,quantity:x.units.length,notes:x.notes||'',accompaniments_by_unit:isQuentinha(x.product)?x.units:x.units.map(()=>[])}));
-   const {data,error}=await supabase.rpc('create_salon_order',{p_tab_id:tabId,p_items:payload,p_customer_notes:cart.notes});
-   if(error){alert(error.message);btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO PARA ESTA MESA';return;}
-   salonCarts.delete(tabId);
-   root.querySelector('.salon-menu-screen')?.classList.add('hidden');
-   root.querySelector('.salon-cart-screen')?.classList.add('hidden');
-   const success=root.querySelector('.salon-success-screen');
-   success?.classList.remove('hidden');
-   if(success){
-    success.querySelector('.salon-success-text').textContent='Pedido #'+data.order_number+' · Mesa '+root.dataset.tableNumber+' · Total '+money(data.total_cents)+'. O pedido já foi registrado e enviado para a fila de impressão.';
-    success.querySelector('.salon-success-menu').addEventListener('click',()=>loadSalonOverview(root.dataset.tableId),{once:true});
-    success.querySelector('.salon-success-tab').addEventListener('click',async()=>{await loadSalonOverview(root.dataset.tableId);$('salonShowTab')?.click();},{once:true});
-   }
-  }
- });
- root.querySelector('.salon-cart')?.addEventListener('change',e=>{
-  const side=e.target.closest('input[data-side-product]');
-  if(side){const item=cart.items.get(side.dataset.sideProduct);if(!item)return;const unit=item.units[Number(side.dataset.unit)];if(!unit)return;
-   if(side.checked){if(unit.length>=2){side.checked=false;alert('Escolha no máximo 2 acompanhamentos por quentinha.');return;}unit.push(side.dataset.side);}
-   else{const i=unit.indexOf(side.dataset.side);if(i>=0)unit.splice(i,1);}
-   renderSalonCart(root,tabId,cart,products,accompByProduct);return;
-  }
-  const note=e.target.closest('.salon-item-note');if(note){const item=cart.items.get(note.dataset.product);if(item)item.notes=note.value;return;}
-  if(e.target.matches('.salon-cart-notes'))cart.notes=e.target.value;
- });
- root.querySelector('.salon-cart')?.addEventListener('input',e=>{
-  if(e.target.matches('.salon-item-note')){const item=cart.items.get(e.target.dataset.product);if(item)item.notes=e.target.value;}
-  if(e.target.matches('.salon-cart-notes'))cart.notes=e.target.value;
- });
- renderSalonProducts(root,cart,products,categories);
- renderSalonCart(root,tabId,cart,products,accompByProduct);
-}
+let salonRealtimeChannel=null;
 function message(id,text,type=''){const el=$(id);el.textContent=text;el.className='message '+type}
 function showLogin(){ $('loginScreen').classList.remove('hidden');$('passwordScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
 function showPassword(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('passwordScreen').classList.remove('hidden');$('logoutBtn').classList.add('hidden'); }
 function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
 function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-async function loadSalonOverview(selectedTableId=null){
-  activeSalonTableId=selectedTableId;
+async function loadSalonOverview(){
   $('roleContent').innerHTML='<p class="muted">Carregando mesas e comandas...</p>';
-  const [tr,tabr,pr,cr,ar]=await Promise.all([
+  const [tr,tabr]=await Promise.all([
     supabase.from('restaurant_tables').select('id,table_number,active').order('table_number'),
-    supabase.from('dining_tabs').select('id,table_id,status,opened_at').eq('status','OPEN'),
-    supabase.from('products').select('id,name,description,price_cents,stock_quantity,photo_url,category_id').eq('active',true).gt('stock_quantity',0).order('name'),
-    supabase.from('categories').select('id,name,sort_order').eq('active',true).order('sort_order'),
-    supabase.from('product_accompaniments').select('id,product_id,name,sort_order').eq('active',true).order('sort_order')
+    supabase.from('dining_tabs').select('id,table_id,status,opened_at').eq('status','OPEN')
   ]);
-  if(tr.error)throw tr.error;if(tabr.error)throw tabr.error;if(pr.error)throw pr.error;if(cr.error)throw cr.error;if(ar.error)throw ar.error;
+  if(tr.error)throw tr.error;if(tabr.error)throw tabr.error;
   const tables=(tr.data||[]).slice().sort((a,b)=>Number(a.table_number)-Number(b.table_number));
-  const tabs=tabr.data||[],products=pr.data||[],categories=cr.data||[],accompaniments=ar.data||[];
-  const categoryById=new Map(categories.map(c=>[c.id,c.name]));
-  products.forEach(p=>p.category_name=categoryById.get(p.category_id)||'');
-  const accompByProduct=new Map();
-  accompaniments.forEach(a=>{if(!accompByProduct.has(a.product_id))accompByProduct.set(a.product_id,[]);accompByProduct.get(a.product_id).push(a)});
+  const tabs=tabr.data||[];
   const tabIds=tabs.map(t=>t.id);
   let orders=[];
   if(tabIds.length){
-    const or=await supabase.from('orders').select('id,order_number,dining_tab_id,total_cents,created_at,customer_notes,status,cancellation_reason,order_source,order_items(id,product_name_snapshot,unit_price_cents,quantity,notes,order_item_accompaniments(accompaniment_name,unit_index))').in('dining_tab_id',tabIds).order('created_at',{ascending:true});
+    const or=await supabase.from('orders').select('id,order_number,dining_tab_id,total_cents,created_at,status,order_source').in('dining_tab_id',tabIds).order('created_at',{ascending:true});
     if(or.error)throw or.error;orders=or.data||[];
   }
   const openByTable=new Map(tabs.map(t=>[t.table_id,t]));
@@ -246,66 +151,18 @@ async function loadSalonOverview(selectedTableId=null){
   orders.forEach(o=>{if(!ordersByTab.has(o.dining_tab_id))ordersByTab.set(o.dining_tab_id,[]);ordersByTab.get(o.dining_tab_id).push(o)});
   if(!salonRealtimeChannel){
     salonRealtimeChannel=supabase.channel('salon-staff-live')
-      .on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview(activeSalonTableId).catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
-      .on('postgres_changes',{event:'*',schema:'public',table:'dining_tabs'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview(activeSalonTableId).catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
+      .on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview().catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
+      .on('postgres_changes',{event:'*',schema:'public',table:'dining_tabs'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview().catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
       .subscribe();
   }
   $('roleContent').dataset.salonMode='true';
-  const historyHtml=(tabOrders)=>tabOrders.map(o=>{
-    const origin=o.order_source==='CLIENT_QR'?'CLIENTE · QR CODE':'FUNCIONÁRIO';
-    const items=(o.order_items||[]).map(i=>{
-      const sides=(i.order_item_accompaniments||[]).map(a=>'<div class="muted">Unidade '+safe(Number(a.unit_index)+1)+': '+safe(a.accompaniment_name)+'</div>').join('');
-      return '<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?' · '+safe(i.notes):'')+sides+'</li>';
-    }).join('');
-    return '<article class="salon-order-history"><div class="top"><strong>Pedido #'+safe(o.order_number)+'</strong><span class="pill '+(o.status==='CANCELADO'?'closed':'')+'">'+safe(o.status)+'</span></div><div class="source">'+origin+'</div><ul>'+items+'</ul>'+(o.customer_notes?'<p class="muted">Obs.: '+safe(o.customer_notes)+'</p>':'')+(o.cancellation_reason?'<p class="muted">Motivo: '+safe(o.cancellation_reason)+'</p>':'')+'<small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></article>';
-  }).join('')||'<p class="muted">Ainda não há pedidos nesta comanda.</p>';
-  if(selectedTableId){
-    const table=tables.find(t=>t.id===selectedTableId);
-    const tab=table?openByTable.get(table.id):null;
-    if(!table||!tab){activeSalonTableId=null;return loadSalonOverview();}
-    const tabOrders=ordersByTab.get(tab.id)||[];
-    const total=tabOrders.filter(o=>o.status!=='CANCELADO').reduce((sum,o)=>sum+Number(o.total_cents||0),0);
-    const rootId='salonComposer_'+tab.id.replace(/-/g,'');
-    const categoryButtons='<button type="button" class="active" data-category="all">Todas</button>'+categories.map(c=>'<button type="button" data-category="'+c.id+'">'+safe(c.name)+'</button>').join('');
-    $('roleContent').innerHTML=
-      '<div class="salon-screen-nav"><button type="button" class="secondary" id="salonBackTables">← Todas as mesas</button><button type="button" class="secondary" id="salonShowTab">Ver comanda · '+money(total)+'</button></div>'+
-      '<div id="'+rootId+'" data-salon-composer="'+tab.id+'" data-table-id="'+table.id+'" data-table-number="'+safe(table.table_number)+'">'+
-      '<section class="card salon-menu-screen" id="salonMenuScreen"><h2>Cardápio · Mesa '+safe(table.table_number)+'</h2><p class="muted">Escolha os produtos como no cardápio do cliente. O pedido será adicionado diretamente à comanda aberta.</p>'+
-      '<div class="salon-categories">'+categoryButtons+'</div><div class="salon-products"></div></section>'+
-      '<section class="card salon-cart-screen hidden" id="salonCartScreen"><div class="salon-screen-nav"><button type="button" class="secondary salon-cart-back">← Voltar ao cardápio</button><strong>Mesa '+safe(table.table_number)+'</strong></div><div class="salon-cart"></div></section>'+
-      '<section class="card hidden salon-success-screen" id="salonSuccessScreen"><h2>Pedido adicionado à comanda!</h2><p class="salon-success-text"></p><button type="button" class="primary full salon-success-menu">Continuar no cardápio</button><button type="button" class="secondary full salon-success-tab">Ver comanda atualizada</button></section>'+
-      '<section class="card hidden" id="salonTabScreen"><div class="salon-screen-nav"><button type="button" class="secondary" id="salonTabBack">← Voltar ao cardápio</button><strong>Comanda · Mesa '+safe(table.table_number)+'</strong></div><div class="top"><strong>Total acumulado</strong><strong>'+money(total)+'</strong></div>'+historyHtml(tabOrders)+'<label>Forma de pagamento na saída</label><select id="salonPayment"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button class="danger full" id="salonCloseTab">Fechar conta e liberar mesa</button></section>'+
-      '<button type="button" class="primary salon-cart-open hidden">Carrinho</button></div>';
-    const root=$(rootId);
-    bindSalonComposer(root,tab.id,products,categories,accompByProduct);
-    $('salonBackTables').addEventListener('click',()=>loadSalonOverview());
-    $('salonShowTab').addEventListener('click',()=>{$('salonMenuScreen').classList.add('hidden');$('salonCartScreen').classList.add('hidden');$('salonTabScreen').classList.remove('hidden');$('roleContent').querySelector('.salon-cart-open')?.classList.add('hidden');});
-    $('salonTabBack').addEventListener('click',()=>{
-      $('salonTabScreen').classList.add('hidden');$('salonMenuScreen').classList.remove('hidden');
-      const currentCart=salonCartFor(tab.id);
-      const itemCount=[...currentCart.items.values()].reduce((n,item)=>n+item.units.length,0);
-      $('roleContent').querySelector('.salon-cart-open')?.classList.toggle('hidden',itemCount===0);
-    });
-    $('salonCloseTab').addEventListener('click',async()=>{
-      const payment=$('salonPayment').value;
-      if(!confirm('Confirma o recebimento em '+payment+' e o fechamento da conta da Mesa '+table.table_number+'?'))return;
-      const btn=$('salonCloseTab');btn.disabled=true;
-      const {data,error}=await supabase.rpc('close_dining_tab_with_payment',{p_tab_id:tab.id,p_payment_method:payment,p_closing_note:null});
-      if(error){alert(error.message);btn.disabled=false;return;}
-      alert('Mesa '+table.table_number+' fechada. Total recebido: '+money(data.total_cents)+'. Comprovante enviado à fila da impressora.');
-      activeSalonTableId=null;await loadSalonOverview();
-    });
-    const cartOpen=$('roleContent').querySelector('.salon-cart-open');
-    cartOpen.addEventListener('click',()=>{$('salonMenuScreen').classList.add('hidden');$('salonCartScreen').classList.remove('hidden');});
-    return;
-  }
   const cards=tables.map(t=>{
     const tab=openByTable.get(t.id),tabOrders=tab?(ordersByTab.get(tab.id)||[]):[];
-    const total=tabOrders.filter(o=>o.status!=='CANCELADO').reduce((sum,o)=>sum+Number(o.total_cents||0),0);
-    const qrNew=tabOrders.filter(o=>o.order_source==='CLIENT_QR'&&['APROVADO','ENVIADO_IMPRESSAO','FALHA_IMPRESSAO'].includes(o.status)).length;
-    const status=tab?'EM USO':'LIVRE';
-    return '<button type="button" class="salon-table-tile '+(tab?'busy':'free')+'" data-table="'+t.id+'"><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+status+'</span>'+
-      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+tabOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>':'<span class="meta">Disponível para receber clientes</span>')+
+    const activeOrders=tabOrders.filter(o=>o.status!=='CANCELADO');
+    const total=activeOrders.reduce((sum,o)=>sum+Number(o.total_cents||0),0);
+    const qrNew=activeOrders.filter(o=>o.order_source==='CLIENT_QR'&&['APROVADO','ENVIADO_IMPRESSAO','FALHA_IMPRESSAO'].includes(o.status)).length;
+    return '<button type="button" class="salon-table-tile '+(tab?'busy':'free')+'" data-table="'+t.id+'"><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+(tab?'EM USO':'LIVRE')+'</span>'+
+      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+activeOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>':'<span class="meta">Disponível para receber clientes</span>')+
       '<span class="meta">'+(tab?'Toque para abrir a mesa':'Toque para abrir comanda')+'</span></button>';
   }).join('');
   $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Mesas em ordem numérica · Vermelho: em uso · Verde: livre</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div>';
