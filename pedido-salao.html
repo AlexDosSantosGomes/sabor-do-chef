@@ -162,9 +162,16 @@ $('accompConfirm').addEventListener('click',()=>{if(!pendingProduct)return;const
 function addUnit(p,selected){const x=cart.get(p.id)||{product:p,units:[]};x.units.push([...selected]);cart.set(p.id,x);$('cartFeedback').textContent=p.name+' adicionado ao carrinho.';renderCart()}
 function changeQty(id,delta){const x=cart.get(id);if(!x)return;if(delta>0){addProduct(id);return;}x.units.pop();if(!x.units.length)cart.delete(id);renderCart()}
 function renderCart(){
- const rows=[...cart.values()];$('cartSection').classList.toggle('hidden',rows.length===0);const itemCount=rows.reduce((n,x)=>n+x.units.length,0);$('cartHeading').textContent='Seu pedido ('+itemCount+' '+(itemCount===1?'item':'itens')+')';
+ const rows=[...cart.values()];
+ const itemCount=rows.reduce((n,x)=>n+x.units.length,0);
+ $('cartSection').classList.toggle('hidden',itemCount===0||(employeeMode&&!employeeCartScreenOpen));
+ $('cartHeading').textContent='Seu pedido ('+itemCount+' '+(itemCount===1?'item':'itens')+')';
  $('cart').innerHTML=rows.map(x=>'<div class="cart-row"><div><strong>'+esc(x.product.name)+'</strong><div class="muted">'+money(x.product.price_cents*x.units.length)+'</div>'+(isQuentinha(x.product)?x.units.map((s,i)=>s.length?'<div class="unit-detail">Quentinha '+(i+1)+': '+s.map(esc).join(', ')+'</div>':'').join(''):'')+'</div><div><button class="minor" data-minus="'+x.product.id+'">−</button> '+x.units.length+' <button data-plus="'+x.product.id+'">+</button></div></div>').join('');
  const total=rows.reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0);$('total').textContent=money(total);
+ if(employeeMode){
+  $('cartDock').classList.toggle('hidden',itemCount===0||employeeCartScreenOpen);
+  $('cartDock').textContent='Carrinho · '+itemCount+' item(ns) · '+money(total);
+ }
  $('cart').querySelectorAll('[data-minus]').forEach(b=>b.addEventListener('click',()=>changeQty(b.dataset.minus,-1)));
  $('cart').querySelectorAll('[data-plus]').forEach(b=>b.addEventListener('click',()=>changeQty(b.dataset.plus,1)));
 }
@@ -172,15 +179,19 @@ $('categoryFilter').addEventListener('change',renderProducts);
 $('sendOrder').addEventListener('click',async()=>{
  const rows=[...cart.values()];if(!rows.length)return;
  $('sendOrder').disabled=true;$('sendOrder').textContent='Enviando...';
- const payload=rows.map(x=>({product_id:x.product.id,quantity:x.units.length,accompaniments_by_unit:isQuentinha(x.product)?x.units:x.units.map(()=>[])}));
- const {data,error}=await db.rpc('create_salon_qr_order',{p_qr_token:token,p_items:payload,p_customer_notes:$('notes').value.trim()});
+ const payload=rows.map(x=>({product_id:x.product.id,quantity:x.units.length,notes:'',accompaniments_by_unit:isQuentinha(x.product)?x.units:x.units.map(()=>[])}));
+ const {data,error}=employeeMode
+  ? await db.rpc('create_salon_order',{p_tab_id:employeeTabId,p_items:payload,p_customer_notes:$('notes').value.trim()})
+  : await db.rpc('create_salon_qr_order',{p_qr_token:token,p_items:payload,p_customer_notes:$('notes').value.trim()});
  $('sendOrder').disabled=false;$('sendOrder').textContent='Enviar pedido para a mesa';
  if(error){alert(error.message);return;}
- $('successText').textContent='Pedido #'+data.order_number+' · Mesa '+data.table_number+' · Total: '+money(data.total_cents);
+ $('successText').textContent=employeeMode
+  ? 'Pedido #'+data.order_number+' adicionado à comanda da Mesa '+tableNumber+'. Total: '+money(data.total_cents)+'.'
+  : 'Pedido #'+data.order_number+' · Mesa '+data.table_number+' · Total: '+money(data.total_cents);
  $('successItems').innerHTML='<strong>Produtos solicitados</strong><ul>'+rows.map(x=>'<li>'+x.units.length+'x '+esc(x.product.name)+' — '+money(x.product.price_cents*x.units.length)+(isQuentinha(x.product)?x.units.map((s,i)=>s.length?'<div class="unit-detail">Quentinha '+(i+1)+': '+s.map(esc).join(', ')+'</div>':'').join(''):'')+'</li>').join('')+'</ul>';
- $('success').classList.remove('hidden');$('cartSection').classList.add('hidden');cart.clear();$('notes').value='';
+ $('success').classList.remove('hidden');$('cartSection').classList.add('hidden');$('cartDock').classList.add('hidden');$('menuSection').classList.toggle('hidden',employeeMode);cart.clear();employeeCartScreenOpen=false;$('notes').value='';
 });
-$('continue').addEventListener('click',()=>{$('success').classList.add('hidden');$('menuSection').scrollIntoView({behavior:'smooth'});});
+$('continue').addEventListener('click',()=>{$('success').classList.add('hidden');$('menuSection').classList.remove('hidden');if(employeeMode){renderCart();$('menuSection').scrollIntoView({behavior:'smooth'});}else $('menuSection').scrollIntoView({behavior:'smooth'});});
 init();
 </script>
 </body></html>
