@@ -159,6 +159,7 @@ class PrintService : Service() {
     }
 
     private fun buildTickets(job: JSONObject): ByteArray {
+        if (job.optString("job_type") == "DAILY_CLOSE") return buildDailyCashCloseTicket(job)
         val order = job.getJSONObject("order")
         val items = job.optJSONArray("items")
         val accompaniments = job.optJSONArray("accompaniments")
@@ -256,6 +257,61 @@ class PrintService : Service() {
         return out.toByteArray()
     }
 
+
+    private fun buildDailyCashCloseTicket(job: JSONObject): ByteArray {
+        val report = job.optJSONObject("report") ?: JSONObject()
+        val reportDate = report.optString("report_date", "Data não informada")
+        val sales = report.optJSONArray("sales")
+        val totals = report.optJSONObject("totals") ?: JSONObject()
+        val counts = report.optJSONObject("counts") ?: JSONObject()
+        val amountFormat = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply { minimumFractionDigits = 2; maximumFractionDigits = 2 }
+        fun brl(cents: Int) = "R$ " + amountFormat.format(cents / 100.0)
+        fun method(value: String): String = when (value.uppercase(Locale.ROOT)) {
+            "CASH", "DINHEIRO" -> "DINHEIRO"
+            "PIX" -> "PIX"
+            "CARD", "CARTAO", "CARTÃO", "CREDIT_CARD", "DEBIT_CARD", "CARTAO_CREDITO", "CARTAO_DEBITO" -> "CARTAO"
+            else -> "OUTROS"
+        }
+        val total = totals.optInt("cash", 0) + totals.optInt("pix", 0) + totals.optInt("card", 0) + totals.optInt("other", 0)
+        val ticket = buildString {
+            append("SABOR DO CHEF\n")
+            append("================================\n")
+            append("FECHAMENTO DIARIO DO CAIXA\n")
+            append("DATA: ").append(reportDate.split("-").reversed().joinToString("/")).append("\n")
+            append("================================\n")
+            append("RESUMO POR PAGAMENTO\n")
+            append("DINHEIRO: ").append(brl(totals.optInt("cash", 0))).append(" (").append(counts.optInt("cash", 0)).append(" vendas)\n")
+            append("PIX: ").append(brl(totals.optInt("pix", 0))).append(" (").append(counts.optInt("pix", 0)).append(" vendas)\n")
+            append("CARTAO: ").append(brl(totals.optInt("card", 0))).append(" (").append(counts.optInt("card", 0)).append(" vendas)\n")
+            if (totals.optInt("other", 0) > 0) append("OUTROS: ").append(brl(totals.optInt("other", 0))).append("\n")
+            append("--------------------------------\n")
+            append("TOTAL GERAL: ").append(brl(total)).append("\n")
+            append("--------------------------------\n")
+            append("VENDAS DO DIA\n")
+            if (sales == null || sales.length() == 0) append("Nenhuma venda concluida.\n")
+            else for (i in 0 until sales.length()) {
+                val sale = sales.getJSONObject(i)
+                val source = sale.optString("source", "VENDA")
+                val reference = if (source == "SALAO") "MESA " + sale.optString("table_number", "N/I") else "PEDIDO #" + sale.optString("order_number", "N/I")
+                append(source).append(" - ").append(reference).append("\n")
+                append("  ").append(brl(sale.optInt("total_cents", 0))).append(" - ").append(method(sale.optString("payment_method"))).append("\n")
+            }
+            append("--------------------------------\n")
+            append("VENDAS: ").append(sales?.length() ?: 0).append("\n")
+            append("FECHAMENTO CONSOLIDADO\n")
+            append("SABOR DO CHEF\n\n\n")
+        }
+        val out = java.io.ByteArrayOutputStream()
+        out.write(PrinterText.initialize())
+        out.write(byteArrayOf(0x1B, 0x61, 0x01))
+        out.write(byteArrayOf(0x1D, 0x21, 0x11))
+        out.write(PrinterText.encode("FECHAMENTO DE CAIXA\n"))
+        out.write(byteArrayOf(0x1D, 0x21, 0x00))
+        out.write(byteArrayOf(0x1B, 0x61, 0x00))
+        out.write(PrinterText.encode(ticket))
+        out.write(byteArrayOf(0x1D, 0x56, 0x00))
+        return out.toByteArray()
+    }
 
     private fun buildDiningTabCloseTicket(
         order: JSONObject,
