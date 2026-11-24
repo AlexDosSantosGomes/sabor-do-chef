@@ -97,9 +97,11 @@ Deno.serve(async (req: Request) => {
         next_attempt_at: new Date().toISOString()
       };
       if (existingJob) {
-        const { error: queueError } = await db.from("print_jobs")
-          .update(queuePayload).eq("id", existingJob.id);
+        const { data: requeued, error: queueError } = await db.from("print_jobs")
+          .update(queuePayload).eq("id", existingJob.id).neq("status", "PROCESSANDO")
+          .select("id").maybeSingle();
         if (queueError) return reply({ error: "Não foi possível colocar as duas vias na fila." }, 500);
+        if (!requeued) return reply({ error: "Este pedido já está sendo impresso. Aguarde a conclusão antes de solicitar outra via." }, 409);
       } else {
         const { error: queueError } = await db.from("print_jobs")
           .insert({ ...queuePayload, order_id: order.id });
