@@ -37,11 +37,14 @@ import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
 const db=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
 const $=id=>document.getElementById(id),token=new URLSearchParams(location.search).get('mesa');
 let cart=new Map(),products=[],categories=[],accompaniments=new Map(),pendingProduct=null,tableNumber=null;
+let employeeMode=new URLSearchParams(location.search).get('funcionario')==='1';
+let employeeTabId=new URLSearchParams(location.search).get('tab');
+let employeeCartScreenOpen=false,employeeRealtimeChannel=null;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 function isQuentinha(p){const name=categories.find(c=>c.id===p.category_id)?.name;return ['quentinha','quentinhas'].includes(norm(name))}
-async function init(){
+async function initQrMode(){
  if(!token){$('tableTitle').textContent='QR Code inválido';$('tableMessage').textContent='Não encontramos o código desta mesa.';return;}
  const {data:ctx,error}=await db.rpc('get_salon_qr_context',{p_qr_token:token});
  if(error||!ctx){$('tableTitle').textContent='Não foi possível abrir o cardápio';$('tableMessage').textContent=error?.message||'Erro ao validar mesa.';return;}
@@ -58,6 +61,85 @@ async function init(){
  (ar.data||[]).forEach(a=>{if(!accompaniments.has(a.product_id))accompaniments.set(a.product_id,[]);accompaniments.get(a.product_id).push(a.name)});
  $('categoryFilter').innerHTML='<option value="">Todas as categorias</option>'+categories.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('');
  $('menuSection').classList.remove('hidden');renderProducts();
+}
+async function loadMenuData(){
+ const [pr,cr,ar]=await Promise.all([
+  db.from('products').select('id,name,description,price_cents,photo_url,category_id,stock_quantity').eq('active',true).gt('stock_quantity',0).order('name'),
+  db.from('categories').select('id,name,sort_order').eq('active',true).order('sort_order'),
+  db.from('product_accompaniments').select('id,product_id,name,sort_order').eq('active',true).order('sort_order')
+ ]);
+ if(pr.error||cr.error||ar.error)throw (pr.error||cr.error||ar.error);
+ categories=cr.data||[];products=pr.data||[];
+ accompaniments.clear();
+ (ar.data||[]).forEach(a=>{if(!accompaniments.has(a.product_id))accompaniments.set(a.product_id,[]);accompaniments.get(a.product_id).push(a.name)});
+ $('categoryFilter').innerHTML='<option value="">Todas as categorias</option>'+categories.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('');
+ $('menuSection').classList.remove('hidden');renderProducts();
+}
+async function initEmployeeMode(){
+ if(!employeeTabId){$('tableTitle').textContent='Comanda não informada';$('tableMessage').textContent='Volte à tela de mesas e selecione uma mesa.';return;}
+ const {data:sessionData,error:sessionError}=await db.auth.getSession();
+ if(sessionError||!sessionData.session){$('tableTitle').textContent='Acesso necessário';$('tableMessage').textContent='Entre novamente no portal de funcionários.';return;}
+ const {data:role,error:roleError}=await db.rpc('get_my_access_role');
+ if(roleError||!['SALON','ADMIN'].includes(role)){$('tableTitle').textContent='Acesso não autorizado';$('tableMessage').textContent='Esta tela é exclusiva da equipe autorizada do salão.';return;}
+ const {data:tab,error}=await db.from('dining_tabs').select('id,status,table_id,restaurant_tables(table_number)').eq('id',employeeTabId).maybeSingle();
+ if(error||!tab||tab.status!=='OPEN'){$('tableTitle').textContent='Comanda indisponível';$('tableMessage').textContent=error?.message||'Esta comanda foi encerrada ou não existe.';return;}
+ const table=Array.isArray(tab.restaurant_tables)?tab.restaurant_tables[0]:tab.restaurant_tables;
+ tableNumber=table?.table_number;
+ $('tableTitle').textContent='Mesa '+tableNumber;
+ $('tableMessage').textContent='Comanda aberta · Cardápio do funcionário';
+ $('employeeNav').classList.remove('hidden');
+ $('employeeBackMenu').classList.remove('hidden');
+ $('employeeGoTables').addEventListener('click',()=>location.href='./portal-funcionarios.html');
+ $('employeeGoMenu').addEventListener('click',()=>{
+  $('employeeBill').classList.add('hidden');$('menuSection').classList.remove('hidden');
+  $('cartSection').classList.toggle('hidden',!cart.size||!employeeCartScreenOpen);
+  $('cartDock').classList.toggle('hidden',!cart.size||employeeCartScreenOpen);
+ });
+ $('employeeGoBill').addEventListener('click',async()=>{
+  $('menuSection').classList.add('hidden');$('cartSection').classList.add('hidden');$('cartDock').classList.add('hidden');
+  $('employeeBill').classList.remove('hidden');await loadEmployeeBill();
+ });
+ $('cartDock').addEventListener('click',()=>{
+  employeeCartScreenOpen=true;$('menuSection').classList.add('hidden');$('employeeBill').classList.add('hidden');
+  $('cartSection').classList.remove('hidden');$('employeeBackMenu').classList.remove('hidden');renderCart();
+ });
+ $('employeeBackMenu').addEventListener('click',()=>{
+  employeeCartScreenOpen=false;$('cartSection').classList.add('hidden');$('menuSection').classList.remove('hidden');renderCart();
+ });
+ $('employeeCloseBill').addEventListener('click',async()=>{
+  const payment=$('employeePayment').value;
+  if(!confirm('Confirma o recebimento em '+payment+' e o fechamento da conta da Mesa '+tableNumber+'?'))return;
+  const button=$('employeeCloseBill');button.disabled=true;
+  const {data:closed,error:closeError}=await db.rpc('close_dining_tab_with_payment',{p_tab_id:employeeTabId,p_payment_method:payment,p_closing_note:null});
+  if(closeError){alert(closeError.message);button.disabled=false;return;}
+  alert('Mesa '+tableNumber+' encerrada. Total recebido: '+money(closed.total_cents)+'. Comprovante enviado para a fila de impressão.');
+  location.href='./portal-funcionarios.html';
+ });
+ try{await loadMenuData();}catch(e){$('tableMessage').textContent=e.message||'Não foi possível carregar o cardápio.';return;}
+ employeeRealtimeChannel=db.channel('employee-tab-'+employeeTabId)
+  .on('postgres_changes',{event:'*',schema:'public',table:'orders',filter:'dining_tab_id=eq.'+employeeTabId},()=>{if(!$('employeeBill').classList.contains('hidden'))loadEmployeeBill();})
+  .subscribe();
+}
+async function loadEmployeeBill(){
+ const {data:orders,error}=await db.from('orders')
+  .select('id,order_number,status,order_source,total_cents,created_at,customer_notes,order_items(product_name_snapshot,unit_price_cents,quantity,notes,order_item_accompaniments(accompaniment_name,unit_index))')
+  .eq('dining_tab_id',employeeTabId).order('created_at',{ascending:true});
+ if(error){$('employeeBillHistory').textContent=error.message;return;}
+ const rows=orders||[];
+ const total=rows.filter(o=>o.status!=='CANCELADO').reduce((sum,o)=>sum+Number(o.total_cents||0),0);
+ $('employeeBillTotal').textContent=money(total);
+ $('employeeBillHistory').innerHTML=rows.map(o=>{
+  const source=o.order_source==='CLIENT_QR'?'CLIENTE · QR CODE':'FUNCIONÁRIO';
+  const items=(o.order_items||[]).map(i=>{
+   const sides=(i.order_item_accompaniments||[]).map(a=>'<div class="unit-detail">Unidade '+(Number(a.unit_index)+1)+': '+esc(a.accompaniment_name)+'</div>').join('');
+   return '<div class="employee-bill-line"><strong>'+esc(i.quantity)+'x '+esc(i.product_name_snapshot)+'</strong><div class="muted">'+money(i.unit_price_cents*i.quantity)+'</div>'+sides+(i.notes?'<div class="muted">Obs.: '+esc(i.notes)+'</div>':'')+'</div>';
+  }).join('');
+  return '<article class="employee-bill-line"><div class="employee-source">'+source+'</div><div class="top"><strong>Pedido #'+esc(o.order_number)+'</strong><span class="pill">'+esc(o.status)+'</span></div>'+items+(o.customer_notes?'<p class="muted">Obs. geral: '+esc(o.customer_notes)+'</p>':'')+'<small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></article>';
+ }).join('')||'<p class="muted">Nenhum pedido nesta comanda.</p>';
+}
+async function init(){
+ if(employeeMode){await initEmployeeMode();return;}
+ await initQrMode();
 }
 function renderProducts(){
  const category=$('categoryFilter').value,list=products.filter(p=>(!category||p.category_id===category)&&p.stock_quantity>0);
