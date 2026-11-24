@@ -63,6 +63,27 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 @media(max-width:600px){.salon-products{grid-template-columns:repeat(2,minmax(0,1fr))}.salon-product img{height:88px}}
 
 @media(max-width:600px){main{margin:16px auto}.card{padding:17px}.login{margin:32px auto}}
+
+.salon-table-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.salon-table-tile{border:0;border-radius:16px;padding:16px;text-align:left;min-height:150px;color:#fff;box-shadow:0 6px 18px #20263818}
+.salon-table-tile.busy{background:linear-gradient(145deg,#8f1018,#c51d27)}
+.salon-table-tile.free{background:linear-gradient(145deg,#13783d,#20a45a)}
+.salon-table-tile .big{font-size:36px;line-height:1;font-weight:950;display:block;margin-bottom:12px}
+.salon-table-tile .meta{display:block;font-size:12px;margin-top:5px;opacity:.96}
+.salon-screen-nav{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.salon-screen-nav button{flex:1}
+.salon-menu-screen{padding-bottom:92px}
+.salon-menu-screen .salon-categories{position:sticky;top:0;background:#fff;z-index:3;padding:10px 0}
+.salon-cart-open{position:fixed;z-index:15;left:14px;right:14px;bottom:14px;width:calc(100% - 28px);box-shadow:0 8px 28px #20263835;font-size:16px}
+.salon-cart-screen{padding-bottom:20px}
+.salon-cart-screen .salon-cart{margin-top:12px}
+.salon-cart-screen .salon-submit{position:sticky;bottom:12px;box-shadow:0 4px 18px #20263820}
+.salon-product-description{font-size:11px;color:var(--muted);line-height:1.35;margin-top:4px;min-height:28px}
+.salon-order-history{border:1px solid var(--border);border-radius:12px;padding:12px;margin:10px 0;background:#fff}
+.salon-order-history .source{font-size:11px;font-weight:850;color:var(--red)}
+.salon-table-status{font-weight:900}
+@media(max-width:420px){.salon-table-tile{min-height:132px;padding:12px}.salon-table-tile .big{font-size:32px}}
+
 </style>
 </head>
 <body>
@@ -104,6 +125,8 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
 const $=id=>document.getElementById(id);
 const salonCarts=new Map();
+let activeSalonTableId=null;
+let salonRealtimeChannel=null;
 const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const normalizeText=v=>String(v||'').toLowerCase().trim();
 function isQuentinha(p){return normalizeText(p.category_name||'').includes('quentinha')}
@@ -123,7 +146,9 @@ function renderSalonCart(root,tabId,cart,products,accompByProduct){
   return '<div class="salon-cart-line"><div class="top"><strong>'+safe(item.product.name)+'</strong><strong>'+item.units.length+' × '+money(item.product.price_cents)+'</strong></div><div class="actions"><button class="secondary salon-cart-adjust" data-product="'+item.product.id+'" data-delta="-1">−</button><button class="secondary salon-cart-adjust" data-product="'+item.product.id+'" data-delta="1">+</button><button class="danger salon-cart-remove" data-product="'+item.product.id+'">Remover</button></div>'+units+'<label>Observação deste item</label><input class="salon-item-note" data-product="'+item.product.id+'" maxlength="200" value="'+safe(item.notes||'')+'" placeholder="Ex.: sem cebola"></div>';
  }).join('');
  const total=[...cart.items.values()].reduce((sum,item)=>sum+item.product.price_cents*item.units.length,0);
- box.innerHTML='<div class="top"><strong>Carrinho <span class="salon-cart-count">('+count+' item(ns))</span></strong><strong>'+money(total)+'</strong></div>'+(lines||'<p class="muted">Adicione produtos para montar o pedido.</p>')+'<label>Observação geral do pedido</label><textarea class="salon-cart-notes" rows="2" maxlength="300" placeholder="Observação para a cozinha">'+safe(cart.notes)+'</textarea><div class="salon-feedback" aria-live="polite">'+safe(root.dataset.feedback||'')+'</div><button class="primary full salon-submit" '+(!count?'disabled':'')+'>Revisar e enviar pedido para esta mesa</button>';
+ box.innerHTML='<div class="top"><strong>Revisar pedido <span class="salon-cart-count">('+count+' item(ns))</span></strong><strong>'+money(total)+'</strong></div>'+(lines||'<p class="muted">Adicione produtos para montar o pedido.</p>')+'<label>Observação geral do pedido</label><textarea class="salon-cart-notes" rows="2" maxlength="300" placeholder="Observação para a cozinha">'+safe(cart.notes)+'</textarea><div class="salon-feedback" aria-live="polite">'+safe(root.dataset.feedback||'')+'</div><button class="primary full salon-submit" '+(!count?'disabled':'')+'>CONFIRMAR PEDIDO PARA ESTA MESA</button>';
+ const opener=root.querySelector('.salon-cart-open');
+ if(opener){opener.classList.toggle('hidden',count===0);opener.textContent='Carrinho · '+count+' item(ns) · '+money(total);}
 }
 function bindSalonComposer(root,tabId,products,categories,accompByProduct){
  const cart=salonCartFor(tabId);
@@ -139,23 +164,29 @@ function bindSalonComposer(root,tabId,products,categories,accompByProduct){
   root.dataset.feedback=product.name+' adicionado ao carrinho.';
   renderSalonCart(root,tabId,cart,products,accompByProduct);
  });
+ root.querySelector('.salon-cart-open')?.addEventListener('click',()=>{
+  root.querySelector('.salon-menu-screen')?.classList.add('hidden');
+  root.querySelector('.salon-cart-screen')?.classList.remove('hidden');
+ });
+ root.querySelector('.salon-cart-back')?.addEventListener('click',()=>{
+  root.querySelector('.salon-cart-screen')?.classList.add('hidden');
+  root.querySelector('.salon-menu-screen')?.classList.remove('hidden');
+ });
  root.querySelector('.salon-cart')?.addEventListener('click',async e=>{
-  const adjust=e.target.closest('.salon-cart-adjust');
-  const remove=e.target.closest('.salon-cart-remove');
+  const adjust=e.target.closest('.salon-cart-adjust'),remove=e.target.closest('.salon-cart-remove');
   if(adjust){const item=cart.items.get(adjust.dataset.product);if(!item)return;const delta=Number(adjust.dataset.delta);if(delta>0)item.units.push([]);else item.units.pop();if(!item.units.length)cart.items.delete(adjust.dataset.product);renderSalonCart(root,tabId,cart,products,accompByProduct);return;}
   if(remove){cart.items.delete(remove.dataset.product);renderSalonCart(root,tabId,cart,products,accompByProduct);return;}
   if(e.target.closest('.salon-submit')){
    const count=[...cart.items.values()].reduce((n,x)=>n+x.units.length,0);if(!count)return;
-   const lineBreak=String.fromCharCode(10);
-   const review=[...cart.items.values()].map(x=>x.units.length+'x '+x.product.name).join(lineBreak);
-   if(!confirm('Confirma enviar este pedido para a Mesa '+root.dataset.tableNumber+'?'+lineBreak+lineBreak+review+lineBreak+lineBreak+'Total: '+money([...cart.items.values()].reduce((sum,x)=>sum+x.product.price_cents*x.units.length,0))))return;
    const btn=e.target.closest('.salon-submit');btn.disabled=true;btn.textContent='Enviando pedido...';
    const payload=[...cart.items.values()].map(x=>({product_id:x.product.id,quantity:x.units.length,notes:x.notes||'',accompaniments_by_unit:isQuentinha(x.product)?x.units:x.units.map(()=>[])}));
    const {data,error}=await supabase.rpc('create_salon_order',{p_tab_id:tabId,p_items:payload,p_customer_notes:cart.notes});
-   if(error){alert(error.message);btn.disabled=false;btn.textContent='Revisar e enviar pedido para esta mesa';return;}
+   if(error){alert(error.message);btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO PARA ESTA MESA';return;}
    salonCarts.delete(tabId);
-   alert('Pedido #'+data.order_number+' enviado para a Mesa '+root.dataset.tableNumber+'. Total: '+money(data.total_cents));
-   await loadSalonOverview();
+   root.querySelector('.salon-cart-screen')?.classList.add('hidden');
+   root.querySelector('.salon-menu-screen')?.classList.remove('hidden');
+   alert('Pedido #'+data.order_number+' adicionado à comanda da Mesa '+root.dataset.tableNumber+'. Total: '+money(data.total_cents));
+   await loadSalonOverview(tabId);
   }
  });
  root.querySelector('.salon-cart')?.addEventListener('change',e=>{
@@ -175,7 +206,6 @@ function bindSalonComposer(root,tabId,products,categories,accompByProduct){
  renderSalonProducts(root,cart,products,categories);
  renderSalonCart(root,tabId,cart,products,accompByProduct);
 }
-
 function message(id,text,type=''){const el=$(id);el.textContent=text;el.className='message '+type}
 function showLogin(){ $('loginScreen').classList.remove('hidden');$('passwordScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
 function showPassword(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('passwordScreen').classList.remove('hidden');$('logoutBtn').classList.add('hidden'); }
