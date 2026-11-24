@@ -23,7 +23,7 @@ button,select,input,textarea{font:inherit}button{border:0;border-radius:10px;pad
 <header><h1>Sabor do Chef</h1><p>Cardápio digital · Faça seu pedido com facilidade</p></header>
 <main>
 <section class="card"><h2 id="tableTitle">Carregando mesa...</h2><p id="tableMessage" class="muted">Validando QR Code.</p><div id="closedNotice" class="notice hidden">Esta mesa ainda não está recebendo pedidos. Chame um funcionário para abrir a comanda.</div></section>
-<nav id="employeeNav" class="employee-nav hidden"><button id="employeeGoTables" class="secondary" type="button">Mesas</button><button id="employeeGoMenu" type="button">Cardápio</button><button id="employeeGoBill" class="secondary" type="button">Comanda</button></nav>
+<nav id="employeeNav" class="employee-nav hidden"><button id="employeeGoTables" class="secondary" type="button">Mesas</button><button id="employeeGoMenu" type="button">Cardápio</button><button id="employeeGoBill" class="secondary" type="button">Comanda</button></nav><div id="employeeLiveNotice" class="notice hidden" aria-live="polite"></div>
 <section id="menuSection" class="card hidden"><h2>Cardápio</h2><label for="categoryFilter">Categoria</label><select id="categoryFilter"><option value="">Todas as categorias</option></select><div id="products" class="products"></div></section>
 <section id="employeeBill" class="card hidden"><h2>Comanda da mesa</h2><div id="employeeBillHistory"></div><div class="employee-total" id="employeeBillTotal">R$ 0,00</div><label for="employeePayment">Forma de pagamento na saída</label><select id="employeePayment"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button id="employeeCloseBill" style="width:100%;margin-top:14px">Fechar conta e liberar mesa</button></section>
 <section id="cartSection" class="card hidden"><h2 id="cartHeading">Seu pedido (0 itens)</h2><p id="cartFeedback" aria-live="polite"></p><div id="cart"></div><button id="employeeBackMenu" class="secondary hidden" type="button" style="width:100%;margin-bottom:10px">← Voltar ao cardápio</button><label for="notes">Observação para a equipe (opcional)</label><textarea id="notes" rows="2" maxlength="300" placeholder="Alguma orientação?"></textarea><div id="total" class="total">R$ 0,00</div><button id="sendOrder" style="width:100%">Enviar pedido para a mesa</button><p class="muted">O pagamento será feito na saída, junto com a conta da mesa.</p></section>
@@ -97,7 +97,7 @@ async function initEmployeeMode(){
  });
  $('employeeGoBill').addEventListener('click',async()=>{
   $('success').classList.add('hidden');$('menuSection').classList.add('hidden');$('cartSection').classList.add('hidden');$('cartDock').classList.add('hidden');
-  $('employeeBill').classList.remove('hidden');await loadEmployeeBill();
+  $('employeeBill').classList.remove('hidden');$('employeeLiveNotice').classList.add('hidden');await loadEmployeeBill();
  });
  $('cartDock').addEventListener('click',()=>{
   employeeCartScreenOpen=true;$('menuSection').classList.add('hidden');$('employeeBill').classList.add('hidden');$('success').classList.add('hidden');
@@ -117,7 +117,11 @@ async function initEmployeeMode(){
  });
  try{await loadMenuData();}catch(e){$('tableMessage').textContent=e.message||'Não foi possível carregar o cardápio.';return;}
  employeeRealtimeChannel=db.channel('employee-tab-'+employeeTabId)
-  .on('postgres_changes',{event:'*',schema:'public',table:'orders',filter:'dining_tab_id=eq.'+employeeTabId},()=>{if(!$('employeeBill').classList.contains('hidden'))loadEmployeeBill();})
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders',filter:'dining_tab_id=eq.'+employeeTabId},()=>{
+   loadEmployeeBill();
+   $('employeeLiveNotice').textContent='Novo pedido recebido na Mesa '+tableNumber+'. Abra a comanda para conferir os itens.';
+   $('employeeLiveNotice').classList.remove('hidden');
+  })
   .subscribe();
 }
 async function loadEmployeeBill(){
