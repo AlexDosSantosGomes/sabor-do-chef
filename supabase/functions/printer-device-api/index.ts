@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
 
     if (body.action === "admin_daily_close") {
       const reportDate = String(body.report_date ?? "");
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(reportDate)) return reply({ error: "Informe uma data válida para o fechamento." }, 400);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) return reply({ error: "Informe uma data válida para o fechamento." }, 400);
       const parsedDate = new Date(reportDate + "T12:00:00-03:00");
       if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== reportDate) return reply({ error: "Data inválida para o fechamento." }, 400);
       const { data: existing, error: existingError } = await db.from("print_jobs").select("id,status").eq("job_type", "DAILY_CLOSE").eq("report_date", reportDate).maybeSingle();
