@@ -1,5 +1,6 @@
 package br.com.sabordochef.impressao
 
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -104,13 +105,17 @@ class RealtimePrintListener(
                                     if (status == "ok" && !joinOk.getAndSet(true)) {
                                         joined.countDown()
                                         isConnected = true
+                                        Log.i(TAG, "Supabase Realtime conectado")
                                         delayMs = 1000L
                                         signal()
                                     } else if (status == "error") closed.countDown()
                                 }
                                 "broadcast" -> {
                                     val payload = message.optJSONObject("payload")
-                                    if (payload?.optString("event") == "queue_changed") signal()
+                                    if (payload?.optString("event") == "queue_changed") {
+                                        Log.i(TAG, "Evento Realtime: fila de impressão atualizada")
+                                        signal()
+                                    }
                                 }
                                 "phx_error", "phx_close" -> closed.countDown()
                             }
@@ -119,6 +124,7 @@ class RealtimePrintListener(
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         isConnected = false
+                        Log.w(TAG, "WebSocket Realtime desconectado: ${t.message}")
                         signal()
                         joined.countDown()
                         closed.countDown()
@@ -179,6 +185,7 @@ class RealtimePrintListener(
     }
 
     companion object {
+        private const val TAG = "SaborChefRealtime"
         private const val REALTIME_URL = "wss://enakuleybfvzqurrttwl.supabase.co/realtime/v1/websocket"
         private const val PUBLISHABLE_KEY = "sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA"
         private const val TOPIC = "realtime:printer-queue"
