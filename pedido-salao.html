@@ -23,9 +23,10 @@ button,select,input,textarea{font:inherit}button{border:0;border-radius:10px;pad
 <header><h1>Sabor do Chef</h1><p>Cardápio digital · Faça seu pedido com facilidade</p></header>
 <main>
 <section class="card"><h2 id="tableTitle">Carregando mesa...</h2><p id="tableMessage" class="muted">Validando QR Code.</p><div id="closedNotice" class="notice hidden">Esta mesa ainda não está recebendo pedidos. Chame um funcionário para abrir a comanda.</div></section>
+<section id="customerAccount" class="card hidden"><h2>Minha conta da mesa</h2><p id="customerAccountStatus" class="muted">Confira o total acumulado da sua mesa.</p><div id="customerAccountTotal" class="total">R$ 0,00</div><button id="requestCloseAccount" type="button" style="width:100%">Solicitar fechamento da conta</button><p id="customerAccountHelp" class="muted">Ao solicitar o fechamento, a mesa ficará bloqueada para novos pedidos até o pagamento no caixa.</p></section>
 <nav id="employeeNav" class="employee-nav hidden"><button id="employeeGoTables" class="secondary" type="button">Mesas</button><button id="employeeGoMenu" type="button">Cardápio</button><button id="employeeGoBill" class="secondary" type="button">Comanda</button></nav><div id="employeeLiveNotice" class="notice hidden" aria-live="polite"></div>
 <section id="menuSection" class="card hidden"><h2>Cardápio</h2><label for="categoryFilter">Categoria</label><select id="categoryFilter"><option value="">Todas as categorias</option></select><div id="products" class="products"></div></section>
-<section id="employeeBill" class="card hidden"><h2>Comanda da mesa</h2><div id="employeeBillHistory"></div><div class="employee-total" id="employeeBillTotal">R$ 0,00</div><label for="employeePayment">Forma de pagamento na saída</label><select id="employeePayment"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button id="employeeCloseBill" style="width:100%;margin-top:14px">Fechar conta e liberar mesa</button></section>
+<section id="employeeBill" class="card hidden"><h2>Comanda da mesa</h2><div id="employeeBillHistory"></div><div class="employee-total" id="employeeBillTotal">R$ 0,00</div><label for="employeePayment">Forma de pagamento na saída</label><select id="employeePayment"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button id="employeeCloseBill" style="width:100%;margin-top:14px">Fechar conta e liberar mesa</button><button id="employeeReopenTab" class="secondary hidden" type="button" style="width:100%;margin-top:9px">Cancelar solicitação e reabrir comanda</button></section>
 <section id="cartSection" class="card hidden"><h2 id="cartHeading">Seu pedido (0 itens)</h2><p id="cartFeedback" aria-live="polite"></p><div id="cart"></div><button id="employeeBackMenu" class="secondary hidden" type="button" style="width:100%;margin-bottom:10px">← Voltar ao cardápio</button><label for="notes">Observação para a equipe (opcional)</label><textarea id="notes" rows="2" maxlength="300" placeholder="Alguma orientação?"></textarea><div id="total" class="total">R$ 0,00</div><button id="sendOrder" style="width:100%">Enviar pedido para a mesa</button><p class="muted">O pagamento será feito na saída, junto com a conta da mesa.</p></section>
 <section id="success" class="card hidden"><h2>Pedido realizado com sucesso!</h2><p id="successText"></p><div id="successItems"></div><p class="muted">Seu pedido foi aceito automaticamente e enviado para a cozinha. Você pode continuar escolhendo outros itens.</p><button id="continue" style="width:100%">Continuar escolhendo</button></section>
 </main>
@@ -39,17 +40,41 @@ const $=id=>document.getElementById(id),token=new URLSearchParams(location.searc
 let cart=new Map(),products=[],categories=[],accompaniments=new Map(),pendingProduct=null,tableNumber=null;
 let employeeMode=new URLSearchParams(location.search).get('funcionario')==='1';
 let employeeTabId=new URLSearchParams(location.search).get('tab');
-let employeeCartScreenOpen=false,employeeRealtimeChannel=null;
+let employeeCartScreenOpen=false,employeeRealtimeChannel=null,employeeTabStatus='OPEN';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 function isQuentinha(p){const name=categories.find(c=>c.id===p.category_id)?.name;return ['quentinha','quentinhas'].includes(norm(name))}
+function renderCustomerAccount(ctx){
+ const pending=ctx?.tab_status==='PAYMENT_REQUESTED';
+ $('customerAccount').classList.remove('hidden');
+ $('customerAccountTotal').textContent=money(ctx?.tab_total_cents||0);
+ $('customerAccountStatus').textContent=pending?'Fechamento solicitado · aguardando pagamento no caixa.':'Total acumulado da comanda desta mesa.';
+ $('customerAccountHelp').textContent=pending?'Dirija-se ao caixa. A mesa ficará bloqueada até o funcionário confirmar o pagamento.':'Quando terminar, solicite o fechamento. Depois disso, a comanda não aceitará novos pedidos.';
+ $('requestCloseAccount').classList.toggle('hidden',pending);
+ if(pending){
+  $('menuSection').classList.add('hidden');$('cartSection').classList.add('hidden');$('cartDock').classList.add('hidden');$('success').classList.add('hidden');
+ }
+}
+async function refreshCustomerAccount(){
+ const {data,error}=await db.rpc('get_salon_qr_context',{p_qr_token:token});
+ if(error||!data)return null;
+ renderCustomerAccount(data);
+ if(data.tab_status==='PAYMENT_REQUESTED')$('tableMessage').textContent='Fechamento solicitado · dirija-se ao caixa para pagar.';
+ return data;
+}
 async function initQrMode(){
  if(!token){$('tableTitle').textContent='QR Code inválido';$('tableMessage').textContent='Não encontramos o código desta mesa.';return;}
  const {data:ctx,error}=await db.rpc('get_salon_qr_context',{p_qr_token:token});
  if(error||!ctx){$('tableTitle').textContent='Não foi possível abrir o cardápio';$('tableMessage').textContent=error?.message||'Erro ao validar mesa.';return;}
  tableNumber=ctx.table_number;$('tableTitle').textContent='Mesa '+tableNumber;
+ if(ctx.tab_status==='PAYMENT_REQUESTED'){
+  renderCustomerAccount(ctx);
+  $('tableMessage').textContent='Fechamento solicitado · dirija-se ao caixa para pagar.';
+  return;
+ }
  if(!ctx.has_open_tab){$('tableMessage').textContent='Aguardando abertura da comanda.';$('closedNotice').classList.remove('hidden');return;}
+ renderCustomerAccount(ctx);
  $('tableMessage').textContent='Comanda aberta · Escolha seus produtos.';
  const [pr,cr,ar]=await Promise.all([
   db.from('products').select('id,name,description,price_cents,photo_url,category_id,stock_quantity').eq('active',true).gt('stock_quantity',0).order('name'),
@@ -84,15 +109,17 @@ async function initEmployeeMode(){
  const {data:role,error:roleError}=await db.rpc('get_my_access_role');
  if(roleError||!['SALON','ADMIN'].includes(role)){$('tableTitle').textContent='Acesso não autorizado';$('tableMessage').textContent='Esta tela é exclusiva da equipe autorizada do salão.';return;}
  const {data:tab,error}=await db.from('dining_tabs').select('id,status,table_id,restaurant_tables(table_number)').eq('id',employeeTabId).maybeSingle();
- if(error||!tab||tab.status!=='OPEN'){$('tableTitle').textContent='Comanda indisponível';$('tableMessage').textContent=error?.message||'Esta comanda foi encerrada ou não existe.';return;}
+ if(error||!tab||!['OPEN','PAYMENT_REQUESTED'].includes(tab.status)){$('tableTitle').textContent='Comanda indisponível';$('tableMessage').textContent=error?.message||'Esta comanda foi encerrada ou não existe.';return;}
+ employeeTabStatus=tab.status;
  const table=Array.isArray(tab.restaurant_tables)?tab.restaurant_tables[0]:tab.restaurant_tables;
  tableNumber=table?.table_number;
  $('tableTitle').textContent='Mesa '+tableNumber;
- $('tableMessage').textContent='Comanda aberta · Cardápio do funcionário';
+ $('tableMessage').textContent=employeeTabStatus==='PAYMENT_REQUESTED'?'Cliente solicitou o fechamento · aguardando pagamento no caixa.':'Comanda aberta · Cardápio do funcionário';
  $('employeeNav').classList.remove('hidden');
  $('employeeBackMenu').classList.remove('hidden');
  $('employeeGoTables').addEventListener('click',()=>location.href='./portal-funcionarios.html');
  $('employeeGoMenu').addEventListener('click',()=>{
+  if(employeeTabStatus!=='OPEN')return;
   employeeCartScreenOpen=false;$('success').classList.add('hidden');
   $('employeeBill').classList.add('hidden');$('cartSection').classList.add('hidden');$('menuSection').classList.remove('hidden');
   renderCart();
@@ -108,6 +135,15 @@ async function initEmployeeMode(){
  $('employeeBackMenu').addEventListener('click',()=>{
   employeeCartScreenOpen=false;$('employeeBackMenu').classList.add('hidden');$('cartSection').classList.add('hidden');$('menuSection').classList.remove('hidden');renderCart();
  });
+ $('employeeCloseBill').textContent=employeeTabStatus==='PAYMENT_REQUESTED'?'Confirmar pagamento e liberar mesa':'Fechar conta e liberar mesa';
+ $('employeeReopenTab').classList.toggle('hidden',employeeTabStatus!=='PAYMENT_REQUESTED');
+ $('employeeReopenTab').addEventListener('click',async()=>{
+  if(!confirm('Deseja cancelar a solicitação de fechamento e reabrir a comanda da Mesa '+tableNumber+'?'))return;
+  const button=$('employeeReopenTab');button.disabled=true;
+  const {error}=await db.rpc('reopen_dining_tab_after_payment_cancel',{p_tab_id:employeeTabId});
+  if(error){alert(error.message);button.disabled=false;return;}
+  location.reload();
+ });
  $('employeeCloseBill').addEventListener('click',async()=>{
   const payment=$('employeePayment').value;
   if(!confirm('Confirma o recebimento em '+payment+' e o fechamento da conta da Mesa '+tableNumber+'?'))return;
@@ -117,7 +153,13 @@ async function initEmployeeMode(){
   alert('Mesa '+tableNumber+' encerrada. Total recebido: '+money(closed.total_cents)+'. Comprovante enviado para a fila de impressão.');
   location.href='./portal-funcionarios.html';
  });
- try{await loadMenuData();}catch(e){$('tableMessage').textContent=e.message||'Não foi possível carregar o cardápio.';return;}
+ if(employeeTabStatus==='PAYMENT_REQUESTED'){
+  $('employeeGoMenu').classList.add('hidden');
+  $('employeeBill').classList.remove('hidden');
+  await loadEmployeeBill();
+ }else{
+  try{await loadMenuData();}catch(e){$('tableMessage').textContent=e.message||'Não foi possível carregar o cardápio.';return;}
+ }
  employeeRealtimeChannel=db.channel('employee-tab-'+employeeTabId)
   .on('postgres_changes',{event:'*',schema:'public',table:'orders',filter:'dining_tab_id=eq.'+employeeTabId},payload=>{
    loadEmployeeBill();
@@ -127,7 +169,17 @@ async function initEmployeeMode(){
    }
   })
   .on('postgres_changes',{event:'UPDATE',schema:'public',table:'dining_tabs',filter:'id=eq.'+employeeTabId},payload=>{
-   if(payload.new?.status!=='OPEN'){alert('Esta comanda foi encerrada em outro aparelho.');location.href='./portal-funcionarios.html';}
+   if(payload.new?.status==='CLOSED'){alert('Esta comanda foi encerrada em outro aparelho.');location.href='./portal-funcionarios.html';return;}
+   employeeTabStatus=payload.new?.status||employeeTabStatus;
+   const pending=employeeTabStatus==='PAYMENT_REQUESTED';
+   $('employeeGoMenu').classList.toggle('hidden',pending);
+   $('employeeReopenTab').classList.toggle('hidden',!pending);
+   $('employeeCloseBill').textContent=pending?'Confirmar pagamento e liberar mesa':'Fechar conta e liberar mesa';
+   if(pending){
+    $('tableMessage').textContent='Cliente solicitou o fechamento · aguardando pagamento no caixa.';
+    $('menuSection').classList.add('hidden');$('cartSection').classList.add('hidden');$('cartDock').classList.add('hidden');
+    $('employeeBill').classList.remove('hidden');loadEmployeeBill();
+   }
   })
   .subscribe();
 }
@@ -193,6 +245,15 @@ function renderCart(){
  $('cart').querySelectorAll('[data-plus]').forEach(b=>b.addEventListener('click',()=>changeQty(b.dataset.plus,1)));
  $('cart').querySelectorAll('[data-item-note]').forEach(input=>input.addEventListener('input',()=>{const item=cart.get(input.dataset.itemNote);if(item)item.notes=input.value;}));
 }
+$('requestCloseAccount').addEventListener('click',async()=>{
+ if(!confirm('Deseja solicitar o fechamento da conta? Depois da confirmação, a mesa ficará bloqueada para novos pedidos até o pagamento no caixa.'))return;
+ const button=$('requestCloseAccount');button.disabled=true;button.textContent='Solicitando fechamento...';
+ const {data,error}=await db.rpc('request_salon_tab_payment',{p_qr_token:token});
+ if(error){alert(error.message);button.disabled=false;button.textContent='Solicitar fechamento da conta';await refreshCustomerAccount();return;}
+ renderCustomerAccount({tab_status:'PAYMENT_REQUESTED',tab_total_cents:data.total_cents});
+ $('tableMessage').textContent='Fechamento solicitado · dirija-se ao caixa para pagar.';
+ button.textContent='Fechamento solicitado';
+});
 $('categoryFilter').addEventListener('change',renderProducts);
 $('sendOrder').addEventListener('click',async()=>{
  const rows=[...cart.values()];if(!rows.length)return;
@@ -202,7 +263,8 @@ $('sendOrder').addEventListener('click',async()=>{
   ? await db.rpc('create_salon_order',{p_tab_id:employeeTabId,p_items:payload,p_customer_notes:$('notes').value.trim()})
   : await db.rpc('create_salon_qr_order',{p_qr_token:token,p_items:payload,p_customer_notes:$('notes').value.trim()});
  $('sendOrder').disabled=false;$('sendOrder').textContent='Enviar pedido para a mesa';
- if(error){alert(error.message);return;}
+ if(error){alert(error.message);if(!employeeMode)await refreshCustomerAccount();return;}
+ if(!employeeMode)await refreshCustomerAccount();
  $('successText').textContent=employeeMode
   ? 'Pedido #'+data.order_number+' adicionado à comanda da Mesa '+tableNumber+'. Total: '+money(data.total_cents)+'.'
   : 'Pedido #'+data.order_number+' · Mesa '+data.table_number+' · Total: '+money(data.total_cents);
