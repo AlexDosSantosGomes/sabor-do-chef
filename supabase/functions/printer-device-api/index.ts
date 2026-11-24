@@ -154,7 +154,19 @@ Deno.serve(async (req: Request) => {
         .limit(1)
         .maybeSingle();
       if (error) return reply({ error: "Não foi possível consultar a fila." }, 500);
-      if (!candidate) return reply({ job: null });
+      if (!candidate) {
+        // Se há tarefas agendadas para retry, informa o próximo horário ao APK.
+        // Assim o aparelho dorme até o vencimento, sem polling periódico nem retry perdido.
+        const { data: nextPending, error: nextError } = await db.from("print_jobs")
+          .select("next_attempt_at")
+          .eq("status", "PENDENTE")
+          .gt("next_attempt_at", nowIso)
+          .order("next_attempt_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (nextError) return reply({ error: "Não foi possível consultar o próximo retry." }, 500);
+        return reply({ job: null, retry_at: nextPending?.next_attempt_at ?? null });
+      }
 
       const claimedAt = new Date().toISOString();
       const { data: claimed, error: claimError } = await db.from("print_jobs")
