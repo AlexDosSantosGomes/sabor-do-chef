@@ -274,32 +274,26 @@ function productCardMarkup(p){
 }
 function renderProducts(){
  const root=$('products');
- if(employeeMode){
-  $('customerCategoryNav').classList.add('hidden');
-  $('employeeCategoryFilter').classList.remove('hidden');
-  const category=$('categoryFilter').value;
-  const list=products.filter(p=>(!category||p.category_id===category)&&p.stock_quantity>0);
-  root.className='products';
-  root.innerHTML=list.map(productCardMarkup).join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>';
- }else{
-  $('employeeCategoryFilter').classList.add('hidden');
-  const nav=$('customerCategoryNav');
-  nav.classList.remove('hidden');
-  const ordered=getCustomerMenuCategories();
-  nav.innerHTML=ordered.map(c=>'<button type="button" data-category-id="'+c.id+'" aria-current="false">'+salonCategoryLabel(salonCategoryKey(c.name))+'</button>').join('');
-  root.className='';
-  root.innerHTML=ordered.map(c=>{
-   const key=salonCategoryKey(c.name);
-   const items=products.filter(p=>p.category_id===c.id&&p.stock_quantity>0);
-   return '<section class="menu-category-section" id="menu-category-'+c.id+'"><h3>'+salonCategoryLabel(key)+'</h3><div class="products">'+(items.map(productCardMarkup).join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>')+'</div></section>';
-  }).join('')||'<p class="muted">Nenhuma categoria disponível no momento.</p>';
-  nav.querySelectorAll('button[data-category-id]').forEach(button=>button.addEventListener('click',()=>{
-   const section=document.getElementById('menu-category-'+button.dataset.categoryId);
-   setCustomerActiveCategory(button.dataset.categoryId);
-   section?.scrollIntoView({behavior:'smooth',block:'start'});
-  }));
-  bindCustomerCategoryScroll(ordered);
- }
+ $('employeeCategoryFilter').classList.add('hidden');
+ const nav=$('customerCategoryNav');
+ nav.classList.remove('hidden');
+ const ordered=getCustomerMenuCategories();
+ nav.innerHTML=ordered.map(c=>'<button type="button" data-category-id="'+c.id+'" aria-current="false">'+salonCategoryLabel(salonCategoryKey(c.name))+'</button>').join('');
+ root.className='';
+ root.innerHTML=ordered.map(c=>{
+  const key=salonCategoryKey(c.name);
+  const items=products.filter(p=>p.category_id===c.id&&p.stock_quantity>0);
+  return '<section class="menu-category-section" id="menu-category-'+c.id+'"><h3>'+salonCategoryLabel(key)+'</h3><div class="products">'+(items.map(productCardMarkup).join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>')+'</div></section>';
+ }).join('')||'<p class="muted">Nenhuma categoria disponível no momento.</p>';
+ nav.querySelectorAll('button[data-category-id]').forEach(button=>button.addEventListener('click',()=>{
+  const section=document.getElementById('menu-category-'+button.dataset.categoryId);
+  if(!section)return;
+  setCustomerActiveCategory(button.dataset.categoryId);
+  const navHeight=nav.getBoundingClientRect().height;
+  const targetTop=section.getBoundingClientRect().top+window.scrollY-navHeight-14;
+  window.scrollTo({top:Math.max(0,targetTop),behavior:'smooth'});
+ }));
+ bindCustomerCategoryScroll(ordered);
  root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>addProduct(button.dataset.add)));
 }
 function addProduct(id){
