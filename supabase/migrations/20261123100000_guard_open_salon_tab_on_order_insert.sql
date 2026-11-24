@@ -26,6 +26,9 @@ begin
 end;
 $guard$;
 
+-- Trigger-only function: do not expose direct execution through the Data API.
+revoke all on function public.ensure_salon_order_tab_is_open() from public, anon, authenticated;
+
 drop trigger if exists orders_guard_open_salon_tab on public.orders;
 create trigger orders_guard_open_salon_tab
 before insert on public.orders
