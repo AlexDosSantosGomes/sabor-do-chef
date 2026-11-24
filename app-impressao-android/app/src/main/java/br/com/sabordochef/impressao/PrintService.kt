@@ -75,8 +75,7 @@ class PrintService : Service() {
                 val prefs = getSharedPreferences("printer_config", MODE_PRIVATE)
                 val pendingAckId = prefs.getString("pending_ack_job_id", null)
                 if (!pendingAckId.isNullOrBlank()) {
-                    if (confirmSentJob(token, pendingAckId)) Thread.sleep(1500)
-                    else Thread.sleep(8000)
+                    if (!confirmSentJob(token, pendingAckId)) Thread.sleep(8000)
                     continue
                 }
 
@@ -85,9 +84,11 @@ class PrintService : Service() {
                 val job = response.optJSONObject("job")
                 if (job == null || job.length() == 0) {
                     updateNotification("Central ativa — aguardando pedidos")
-                    // Realtime is the primary wake-up. A bounded wait guarantees
-                    // the queue is rechecked even if a broadcast is dropped.
-                    realtimeListener?.awaitSignal(30_000L) ?: Thread.sleep(30_000L)
+                    // While Realtime is healthy, wait for its next event instead of polling.
+                    // If the socket is down, perform a bounded recovery check until it reconnects.
+                    val waitMs = if (realtimeListener?.isConnected == true) 86_400_000L else 15_000L
+                    if (realtimeListener != null) realtimeListener?.awaitSignal(waitMs)
+                    else Thread.sleep(waitMs)
                     continue
                 }
 
@@ -110,8 +111,7 @@ class PrintService : Service() {
                 // Salva o ACK antes de qualquer nova busca. Se a internet cair após o envio,
                 // o APK confirma a tarefa sem mandar a mesma nota novamente.
                 prefs.edit().putString("pending_ack_job_id", jobId).apply()
-                if (confirmSentJob(token, jobId)) Thread.sleep(1500)
-                else Thread.sleep(8000)
+                if (!confirmSentJob(token, jobId)) Thread.sleep(8000)
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
             } catch (e: Exception) {
