@@ -175,13 +175,14 @@ begin
    where id = p_tab_id;
 
   insert into public.audit_log(actor_user_id, action, entity_type, entity_id, details)
-  values (
-    (select auth.uid()),
-    'REOPENED_DINING_TAB',
-    'dining_tab',
-    p_tab_id,
-    jsonb_build_object('reason', 'payment_request_cancelled')
-  );
+  select ap.user_id,
+         'REOPENED_DINING_TAB',
+         'dining_tab',
+         p_tab_id,
+         jsonb_build_object('reason', 'payment_request_cancelled')
+    from public.admin_profiles ap
+   where ap.user_id = (select auth.uid())
+     and ap.is_active = true;
 
   return true;
 end;
