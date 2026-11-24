@@ -364,7 +364,7 @@ begin
     join public.categories c on c.id = p.category_id
    where oi.id = new.order_item_id;
 
-  if v_category_name not in ('quentinha', 'quentinhas') then
+  if coalesce(v_category_name, '') not in ('quentinha', 'quentinhas') then
     raise exception 'Acompanhamentos só podem ser adicionados às Quentinhas.';
   end if;
 
