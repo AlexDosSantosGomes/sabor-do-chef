@@ -140,7 +140,7 @@ async function loadEmployeeBill(){
    const sides=(i.order_item_accompaniments||[]).map(a=>'<div class="unit-detail">Unidade '+(Number(a.unit_index)+1)+': '+esc(a.accompaniment_name)+'</div>').join('');
    return '<div class="employee-bill-line"><strong>'+esc(i.quantity)+'x '+esc(i.product_name_snapshot)+'</strong><div class="muted">'+money(i.unit_price_cents*i.quantity)+'</div>'+sides+(i.notes?'<div class="muted">Obs.: '+esc(i.notes)+'</div>':'')+'</div>';
   }).join('');
-  return '<article class="employee-bill-line"><div class="employee-source">'+source+'</div><div class="top"><strong>Pedido #'+esc(o.order_number)+'</strong><span class="pill">'+esc(o.status)+'</span></div>'+items+(o.customer_notes?'<p class="muted">Obs. geral: '+esc(o.customer_notes)+'</p>':'')+'<small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></article>';
+  return '<article class="employee-bill-line"><div class="employee-source">'+source+'</div><div class="top"><strong>Pedido #'+esc(o.order_number)+'</strong><span class="pill">'+esc(o.status)+'</span></div>'+items+'<strong>Total do pedido: '+money(o.total_cents)+'</strong>'+(o.customer_notes?'<p class="muted">Obs. geral: '+esc(o.customer_notes)+'</p>':'')+'<small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></article>';
  }).join('')||'<p class="muted">Nenhum pedido nesta comanda.</p>';
 }
 async function init(){
