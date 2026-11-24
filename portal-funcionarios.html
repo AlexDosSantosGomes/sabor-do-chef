@@ -134,7 +134,7 @@ function salonCartFor(tabId){if(!salonCarts.has(tabId))salonCarts.set(tabId,{ite
 function renderSalonProducts(root,cart,products,categories){
  const grid=root.querySelector('.salon-products');if(!grid)return;
  const visible=products.filter(p=>cart.category==='all'||p.category_id===cart.category);
- grid.innerHTML=visible.map(p=>'<article class="salon-product">'+(p.photo_url?'<img loading="lazy" src="'+safe(p.photo_url)+'" alt="'+safe(p.name)+'">':'<div style="height:88px;background:#f1f2f5"></div>')+'<div class="salon-product-info"><div class="salon-product-name">'+safe(p.name)+'</div><div class="salon-product-price">'+money(p.price_cents)+'</div><button class="primary salon-product-add" data-product="'+p.id+'">Adicionar +</button></div></article>').join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>';
+ grid.innerHTML=visible.map(p=>'<article class="salon-product">'+(p.photo_url?'<img loading="lazy" src="'+safe(p.photo_url)+'" alt="'+safe(p.name)+'">':'<div style="height:88px;background:#f1f2f5"></div>')+'<div class="salon-product-info"><div class="salon-product-name">'+safe(p.name)+'</div><div class="salon-product-description">'+safe(p.description||'')+'</div><div class="salon-product-price">'+money(p.price_cents)+'</div><button class="primary salon-product-add" data-product="'+p.id+'">Adicionar +</button></div></article>').join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>';
  root.querySelectorAll('.salon-categories button').forEach(b=>b.classList.toggle('active',b.dataset.category===cart.category));
 }
 function renderSalonCart(root,tabId,cart,products,accompByProduct){
