@@ -94,10 +94,17 @@ class PrintService : Service() {
                             (java.time.Instant.parse(it).toEpochMilli() - System.currentTimeMillis()).coerceAtLeast(1000L)
                         } catch (_: Exception) { 30_000L }
                     }
-                    val defaultWaitMs = if (realtimeListener?.isConnected == true) 86_400_000L else 15_000L
-                    val waitMs = retryDelayMs?.coerceAtMost(86_400_000L) ?: defaultWaitMs
+                    val realtimeHealthy = realtimeListener?.isConnected == true
+                    // Healthy Realtime: no periodic queue polling; wait for a real event,
+                    // a connection/reconnection signal, or a scheduled server retry.
+                    // Disconnected: bounded 15s recovery checks until Realtime returns.
+                    val waitMs = if (realtimeHealthy) {
+                        retryDelayMs ?: 0L // zero means wait indefinitely for a signal
+                    } else {
+                        retryDelayMs?.coerceAtMost(15_000L) ?: 15_000L
+                    }
                     if (realtimeListener != null) realtimeListener?.awaitSignal(waitMs)
-                    else Thread.sleep(waitMs)
+                    else Thread.sleep(if (waitMs > 0L) waitMs else 15_000L)
                     continue
                 }
 
