@@ -91,20 +91,20 @@ async function initEmployeeMode(){
  $('employeeBackMenu').classList.remove('hidden');
  $('employeeGoTables').addEventListener('click',()=>location.href='./portal-funcionarios.html');
  $('employeeGoMenu').addEventListener('click',()=>{
-  $('employeeBill').classList.add('hidden');$('menuSection').classList.remove('hidden');
-  $('cartSection').classList.toggle('hidden',!cart.size||!employeeCartScreenOpen);
-  $('cartDock').classList.toggle('hidden',!cart.size||employeeCartScreenOpen);
+  employeeCartScreenOpen=false;$('success').classList.add('hidden');
+  $('employeeBill').classList.add('hidden');$('cartSection').classList.add('hidden');$('menuSection').classList.remove('hidden');
+  renderCart();
  });
  $('employeeGoBill').addEventListener('click',async()=>{
-  $('menuSection').classList.add('hidden');$('cartSection').classList.add('hidden');$('cartDock').classList.add('hidden');
+  $('success').classList.add('hidden');$('menuSection').classList.add('hidden');$('cartSection').classList.add('hidden');$('cartDock').classList.add('hidden');
   $('employeeBill').classList.remove('hidden');await loadEmployeeBill();
  });
  $('cartDock').addEventListener('click',()=>{
-  employeeCartScreenOpen=true;$('menuSection').classList.add('hidden');$('employeeBill').classList.add('hidden');
+  employeeCartScreenOpen=true;$('menuSection').classList.add('hidden');$('employeeBill').classList.add('hidden');$('success').classList.add('hidden');
   $('cartSection').classList.remove('hidden');$('employeeBackMenu').classList.remove('hidden');renderCart();
  });
  $('employeeBackMenu').addEventListener('click',()=>{
-  employeeCartScreenOpen=false;$('cartSection').classList.add('hidden');$('menuSection').classList.remove('hidden');renderCart();
+  employeeCartScreenOpen=false;$('employeeBackMenu').classList.add('hidden');$('cartSection').classList.add('hidden');$('menuSection').classList.remove('hidden');renderCart();
  });
  $('employeeCloseBill').addEventListener('click',async()=>{
   const payment=$('employeePayment').value;
@@ -164,6 +164,7 @@ function changeQty(id,delta){const x=cart.get(id);if(!x)return;if(delta>0){addPr
 function renderCart(){
  const rows=[...cart.values()];
  const itemCount=rows.reduce((n,x)=>n+x.units.length,0);
+ if(employeeMode&&itemCount===0&&employeeCartScreenOpen){employeeCartScreenOpen=false;$('menuSection').classList.remove('hidden');$('employeeBackMenu').classList.add('hidden');}
  $('cartSection').classList.toggle('hidden',itemCount===0||(employeeMode&&!employeeCartScreenOpen));
  $('cartHeading').textContent='Seu pedido ('+itemCount+' '+(itemCount===1?'item':'itens')+')';
  $('cart').innerHTML=rows.map(x=>'<div class="cart-row"><div><strong>'+esc(x.product.name)+'</strong><div class="muted">'+money(x.product.price_cents*x.units.length)+'</div>'+(isQuentinha(x.product)?x.units.map((s,i)=>s.length?'<div class="unit-detail">Quentinha '+(i+1)+': '+s.map(esc).join(', ')+'</div>':'').join(''):'')+'</div><div><button class="minor" data-minus="'+x.product.id+'">−</button> '+x.units.length+' <button data-plus="'+x.product.id+'">+</button></div></div>').join('');
