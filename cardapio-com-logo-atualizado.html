@@ -143,6 +143,7 @@ body.accomp-open{overflow:hidden}
 body.customer-screen main,body.customer-screen .mobile{display:none!important}
 body.customer-screen #customer-screen{display:block}
 body.customer-screen #success-screen{display:none}
+#message{position:fixed;z-index:150;top:12px;left:50%;transform:translateX(-50%);width:min(calc(100% - 24px),520px);box-shadow:0 8px 24px #0002}
 @media(max-width:480px){#customer-screen{margin:16px auto;padding:0 12px}.customer-card{padding:18px 15px}}
 </style></head>
 <body>
@@ -157,8 +158,8 @@ body.customer-screen #success-screen{display:none}
 <label class="receive-option"><input type="radio" name="order-type" value="DELIVERY" required><span><strong>ENTREGA</strong><small>Receber no endereço informado. Entrega grátis.</small></span></label>
 <label class="receive-option"><input type="radio" name="order-type" value="PICKUP" required><span><strong>RETIRADA NO LOCAL</strong><small>Buscar o pedido diretamente na pensão. Sem taxa.</small></span></label>
 </div><button type="button" class="btn submit" id="continue-customer">Continuar</button></div></aside></div></main>
+<div id="message" class="message" role="status" aria-live="polite"></div>
 <section id="customer-screen" aria-labelledby="customer-screen-title"><form id="checkout"><div class="customer-card"><button type="button" class="btn secondary" id="back-receive">← Voltar</button><h2 id="customer-screen-title">Seus dados</h2><p class="small" id="customer-mode-label">Preencha os dados para finalizar seu pedido.</p>
-<h2>Seus dados</h2>
 <label for="customer-name">Nome</label><input id="customer-name" maxlength="100" required autocomplete="name" placeholder="Seu nome">
 <label for="customer-phone">Telefone com DDD</label><input id="customer-phone" maxlength="25" required inputmode="tel" autocomplete="tel" placeholder="(21) 99999-9999">
 <div id="delivery-address-field" class="hidden"><label for="address">Endereço completo</label><textarea id="address" maxlength="300" autocomplete="street-address" placeholder="Rua, número, complemento, bairro e referência"></textarea></div>
@@ -166,7 +167,7 @@ body.customer-screen #success-screen{display:none}
 <label for="payment">Forma de pagamento</label><select id="payment"><option value="CASH">Dinheiro</option><option value="PIX">Pix na entrega</option><option value="CARD">Cartão na entrega</option></select>
 <div id="change-area"><label class="check"><input type="checkbox" id="needs-change"> Precisa de troco?</label><div id="change-value" class="hidden"><label for="change-for">Vai pagar com quanto? (R$)</label><input id="change-for" inputmode="decimal" placeholder="Ex.: 50,00"><div id="change-preview" class="small" aria-live="polite" style="margin-top:7px;font-weight:700"></div></div></div>
 <button class="btn submit" id="submit" type="submit">Confirmar pedido</button><div class="small">O pagamento será feito no recebimento ou na retirada. Não há cobrança pelo site.</div>
-<div id="message" class="message" role="status" aria-live="polite"></div></div></form></section>
+</div></form></section>
 <section id="success-screen" aria-live="polite">
  <div class="success-mark" aria-hidden="true">✓</div>
  <h2>Pedido confirmado!</h2>
@@ -175,6 +176,8 @@ body.customer-screen #success-screen{display:none}
   <div><span>Número do pedido</span><strong id="success-order-number">—</strong></div>
   <div><span>Cliente</span><strong id="success-customer">—</strong></div>
   <div><span>Total</span><strong id="success-total">—</strong></div>
+  <div><span>Modalidade</span><strong id="success-mode">—</strong></div>
+  <div id="success-address-row" style="display:none"><span>Endereço</span><strong id="success-address">—</strong></div>
   <div><span>Pagamento</span><strong id="success-payment">—</strong></div>
  </div>
  <a id="success-whatsapp" href="#" target="_blank" rel="noopener noreferrer">Enviar confirmação para o Sabor do Chef pelo WhatsApp</a>
@@ -386,6 +389,9 @@ $('checkout').onsubmit=async e=>{
   $('success-customer').textContent=payload.customer_name;
   $('success-total').textContent=money(data.total_cents);
   $('success-payment').textContent=paymentLabels[payment]||'Pagamento no recebimento';
+  $('success-mode').textContent=orderType==='PICKUP'?'Retirada no local':'Entrega grátis';
+  $('success-address-row').style.display=orderType==='DELIVERY'?'flex':'none';
+  $('success-address').textContent=orderType==='DELIVERY'?payload.delivery_address:'—';
   const orderLines=[...cart.values()].map(({product,units})=>{
    const accompaniments=units.map(choices=>choices.length?' 🍟 Acompanhamentos: '+choices.join(', '):'').filter(Boolean);
    return ['- '+units.length+'x '+product.name+' - *'+money(product.price_cents*units.length)+'*',...accompaniments].join('\n');
