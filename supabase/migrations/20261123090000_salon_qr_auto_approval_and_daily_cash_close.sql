@@ -228,3 +228,121 @@ begin
   end if;
 end;
 $$;
+
+
+-- Harden payment validation: SQL NULL must not bypass the allowed-method check.
+-- Keep the existing role checks, row lock, idempotent close and TAB_CLOSE queue behavior.
+create or replace function public.close_dining_tab_with_payment(
+  p_tab_id uuid,
+  p_payment_method text,
+  p_closing_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $close$
+declare
+  v_total bigint;
+  v_status text;
+  v_table_id uuid;
+  v_table_number integer;
+  v_job uuid;
+begin
+  if (select auth.uid()) is null then
+    raise exception 'É necessário entrar com uma conta autorizada.';
+  end if;
+
+  if not (private.is_active_admin() or private.has_staff_role('SALON')) then
+    raise exception 'Acesso restrito à equipe do salão.';
+  end if;
+
+  if p_payment_method is null or p_payment_method not in ('DINHEIRO', 'PIX', 'CARTAO') then
+    raise exception 'Selecione uma forma de pagamento válida.';
+  end if;
+
+  if length(coalesce(p_closing_note, '')) > 300 then
+    raise exception 'Observação deve ter até 300 caracteres.';
+  end if;
+
+  select status, table_id
+    into v_status, v_table_id
+    from public.dining_tabs
+   where id = p_tab_id
+   for update;
+
+  if not found then
+    raise exception 'Comanda não encontrada.';
+  end if;
+
+  if v_status = 'CLOSED' then
+    select id into v_job
+      from public.print_jobs
+     where dining_tab_id = p_tab_id and job_type = 'TAB_CLOSE';
+    select paid_total_cents into v_total
+      from public.dining_tabs where id = p_tab_id;
+    return jsonb_build_object(
+      'tab_id', p_tab_id,
+      'total_cents', coalesce(v_total, 0),
+      'already_closed', true,
+      'print_job_id', v_job
+    );
+  end if;
+
+  if exists (
+    select 1 from public.orders
+     where dining_tab_id = p_tab_id
+       and status in ('RECEBIDO'::public.order_status, 'AGUARDANDO_APROVACAO'::public.order_status)
+  ) then
+    raise exception 'Há pedidos aguardando aceite ou recusa. Resolva-os antes de fechar a conta.';
+  end if;
+
+  select coalesce(sum(total_cents), 0)
+    into v_total
+    from public.orders
+   where dining_tab_id = p_tab_id
+     and status <> 'CANCELADO'::public.order_status;
+
+  select table_number into v_table_number
+    from public.restaurant_tables where id = v_table_id;
+
+  update public.dining_tabs
+     set status = 'CLOSED',
+         closed_by = (select auth.uid()),
+         closed_at = now(),
+         closing_note = nullif(trim(coalesce(p_closing_note, '')), ''),
+         payment_method = p_payment_method,
+         paid_total_cents = v_total
+   where id = p_tab_id;
+
+  update public.orders
+     set status = 'ENTREGUE'
+   where dining_tab_id = p_tab_id
+     and status in (
+       'APROVADO'::public.order_status,
+       'ENVIADO_IMPRESSAO'::public.order_status,
+       'IMPRESSO'::public.order_status,
+       'FALHA_IMPRESSAO'::public.order_status
+     );
+
+  insert into public.print_jobs(job_type, dining_tab_id, status, attempt_count, next_attempt_at)
+  values ('TAB_CLOSE', p_tab_id, 'PENDENTE', 0, now())
+  on conflict (dining_tab_id) where job_type = 'TAB_CLOSE' do nothing
+  returning id into v_job;
+
+  if v_job is null then
+    select id into v_job
+      from public.print_jobs
+     where dining_tab_id = p_tab_id and job_type = 'TAB_CLOSE';
+  end if;
+
+  return jsonb_build_object(
+    'tab_id', p_tab_id,
+    'table_number', v_table_number,
+    'total_cents', v_total,
+    'payment_method', p_payment_method,
+    'print_job_id', v_job,
+    'print_queued', true
+  );
+end;
+$close$;
