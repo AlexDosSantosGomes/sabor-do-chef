@@ -429,13 +429,13 @@ $('checkout').onsubmit=async e=>{
    'https://cardapiosabordochef.com.br'
   ].filter(Boolean).join('\n');
   $('success-whatsapp').href='https://wa.me/?text='+encodeURIComponent(whatsappMessage);
-  cart.clear();drawCart();$('checkout').reset();$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);updateReceiveFields();
+  cart.clear();drawCart();$('checkout').reset();document.querySelectorAll('input[name="order-type"]').forEach(input=>input.checked=false);$('change-area').classList.remove('hidden');$('change-value').classList.add('hidden');updateChangePreview(0);updateReceiveFields();
   document.body.classList.remove('order-screen');
   document.body.classList.add('success-screen');
   window.scrollTo({top:0,behavior:'smooth'});
   await load();
  }catch(err){message(err.message||'Erro ao enviar. Verifique a conexão e tente novamente.')}
- finally{button.disabled=false;button.textContent='Confirmar pedido'}
+ finally{button.disabled=false;button.textContent=(document.querySelector('input[name="order-type"]:checked')?.value==='PICKUP')?'Confirmar retirada':'Confirmar pedido'}
 };
 load();drawCart();
 setInterval(()=>refreshStoreStatus(),30000);
