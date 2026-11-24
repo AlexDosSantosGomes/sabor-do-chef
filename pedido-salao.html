@@ -23,7 +23,7 @@ button,select,input,textarea{font:inherit}button{border:0;border-radius:10px;pad
 <section class="card"><h2 id="tableTitle">Carregando mesa...</h2><p id="tableMessage" class="muted">Validando QR Code.</p><div id="closedNotice" class="notice hidden">Esta mesa ainda não está recebendo pedidos. Chame um funcionário para abrir a comanda.</div></section>
 <section id="menuSection" class="card hidden"><h2>Cardápio</h2><label for="categoryFilter">Categoria</label><select id="categoryFilter"><option value="">Todas as categorias</option></select><div id="products" class="products"></div></section>
 <section id="cartSection" class="card hidden"><h2 id="cartHeading">Seu pedido (0 itens)</h2><p id="cartFeedback" aria-live="polite"></p><div id="cart"></div><label for="notes">Observação para a equipe (opcional)</label><textarea id="notes" rows="2" maxlength="300" placeholder="Alguma orientação?"></textarea><div id="total" class="total">R$ 0,00</div><button id="sendOrder" style="width:100%">Enviar pedido para a mesa</button><p class="muted">O pagamento será feito na saída, junto com a conta da mesa.</p></section>
-<section id="success" class="card hidden"><h2>Pedido enviado!</h2><p id="successText"></p><p class="muted">Seu pedido foi adicionado à comanda da mesa. Você pode continuar escolhendo outros itens.</p><button id="continue" style="width:100%">Continuar escolhendo</button></section>
+<section id="success" class="card hidden"><h2>Pedido realizado com sucesso!</h2><p id="successText"></p><div id="successItems"></div><p class="muted">Seu pedido foi aceito automaticamente e enviado para a cozinha. Você pode continuar escolhendo outros itens.</p><button id="continue" style="width:100%">Continuar escolhendo</button></section>
 </main>
 <div id="accompModal" class="modal hidden"><div class="modal-card"><h2 id="accompTitle">Escolha os acompanhamentos</h2><p class="muted">Opcional · Escolha até 2 por quentinha, sem custo adicional.</p><div id="accompOptions" class="accomp-list"></div><div class="modal-actions"><button id="accompCancel" class="secondary" type="button">Cancelar</button><button id="accompConfirm" type="button">Adicionar ao pedido</button></div></div></div>
 <footer>Pagamento na saída · Sabor do Chef</footer>
@@ -89,7 +89,8 @@ $('sendOrder').addEventListener('click',async()=>{
  const {data,error}=await db.rpc('create_salon_qr_order',{p_qr_token:token,p_items:payload,p_customer_notes:$('notes').value.trim()});
  $('sendOrder').disabled=false;$('sendOrder').textContent='Enviar pedido para a mesa';
  if(error){alert(error.message);return;}
- $('successText').textContent='Pedido #'+data.order_number+' enviado para a mesa '+data.table_number+'. Total deste pedido: '+money(data.total_cents)+'.';
+ $('successText').textContent='Pedido #'+data.order_number+' · Mesa '+data.table_number+' · Total: '+money(data.total_cents);
+ $('successItems').innerHTML='<strong>Produtos solicitados</strong><ul>'+rows.map(x=>'<li>'+x.units.length+'x '+esc(x.product.name)+' — '+money(x.product.price_cents*x.units.length)+'</li>').join('')+'</ul>';
  $('success').classList.remove('hidden');$('cartSection').classList.add('hidden');cart.clear();$('notes').value='';
 });
 $('continue').addEventListener('click',()=>{$('success').classList.add('hidden');$('menuSection').scrollIntoView({behavior:'smooth'});});
