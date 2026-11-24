@@ -211,17 +211,19 @@ function showLogin(){ $('loginScreen').classList.remove('hidden');$('passwordScr
 function showPassword(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('passwordScreen').classList.remove('hidden');$('logoutBtn').classList.add('hidden'); }
 function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
 function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-async function loadSalonOverview(){
-  $('roleContent').innerHTML='<p class="muted">Carregando mesas, comandas e cardápio...</p>';
+async function loadSalonOverview(selectedTableId=null){
+  activeSalonTableId=selectedTableId;
+  $('roleContent').innerHTML='<p class="muted">Carregando mesas e comandas...</p>';
   const [tr,tabr,pr,cr,ar]=await Promise.all([
     supabase.from('restaurant_tables').select('id,table_number,active').order('table_number'),
     supabase.from('dining_tabs').select('id,table_id,status,opened_at').eq('status','OPEN'),
-    supabase.from('products').select('id,name,price_cents,stock_quantity,photo_url,category_id').eq('active',true).gt('stock_quantity',0).order('name'),
+    supabase.from('products').select('id,name,description,price_cents,stock_quantity,photo_url,category_id').eq('active',true).gt('stock_quantity',0).order('name'),
     supabase.from('categories').select('id,name,sort_order').eq('active',true).order('sort_order'),
     supabase.from('product_accompaniments').select('id,product_id,name,sort_order').eq('active',true).order('sort_order')
   ]);
   if(tr.error)throw tr.error;if(tabr.error)throw tabr.error;if(pr.error)throw pr.error;if(cr.error)throw cr.error;if(ar.error)throw ar.error;
-  const tables=tr.data||[],tabs=tabr.data||[],products=pr.data||[],categories=cr.data||[],accompaniments=ar.data||[];
+  const tables=(tr.data||[]).slice().sort((a,b)=>Number(a.table_number)-Number(b.table_number));
+  const tabs=tabr.data||[],products=pr.data||[],categories=cr.data||[],accompaniments=ar.data||[];
   const categoryById=new Map(categories.map(c=>[c.id,c.name]));
   products.forEach(p=>p.category_name=categoryById.get(p.category_id)||'');
   const accompByProduct=new Map();
@@ -229,52 +231,82 @@ async function loadSalonOverview(){
   const tabIds=tabs.map(t=>t.id);
   let orders=[];
   if(tabIds.length){
-    const or=await supabase.from('orders').select('id,order_number,dining_tab_id,total_cents,created_at,customer_notes,status,cancellation_reason,order_items(product_name_snapshot,unit_price_cents,quantity,notes,order_item_accompaniments(accompaniment_name,unit_index))').in('dining_tab_id',tabIds).order('created_at',{ascending:true});
+    const or=await supabase.from('orders').select('id,order_number,dining_tab_id,total_cents,created_at,customer_notes,status,cancellation_reason,order_source,order_items(id,product_name_snapshot,unit_price_cents,quantity,notes,order_item_accompaniments(accompaniment_name,unit_index))').in('dining_tab_id',tabIds).order('created_at',{ascending:true});
     if(or.error)throw or.error;orders=or.data||[];
   }
   const openByTable=new Map(tabs.map(t=>[t.table_id,t]));
   const ordersByTab=new Map();
   orders.forEach(o=>{if(!ordersByTab.has(o.dining_tab_id))ordersByTab.set(o.dining_tab_id,[]);ordersByTab.get(o.dining_tab_id).push(o)});
-  
+  if(!salonRealtimeChannel){
+    salonRealtimeChannel=supabase.channel('salon-staff-live')
+      .on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview(activeSalonTableId).catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
+      .on('postgres_changes',{event:'*',schema:'public',table:'dining_tabs'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview(activeSalonTableId).catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
+      .subscribe();
+  }
+  $('roleContent').dataset.salonMode='true';
+  const historyHtml=(tabOrders)=>tabOrders.map(o=>{
+    const origin=o.order_source==='CLIENT_QR'?'CLIENTE · QR CODE':'FUNCIONÁRIO';
+    const items=(o.order_items||[]).map(i=>{
+      const sides=(i.order_item_accompaniments||[]).map(a=>'<div class="muted">Unidade '+safe(Number(a.unit_index)+1)+': '+safe(a.accompaniment_name)+'</div>').join('');
+      return '<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?' · '+safe(i.notes):'')+sides+'</li>';
+    }).join('');
+    return '<article class="salon-order-history"><div class="top"><strong>Pedido #'+safe(o.order_number)+'</strong><span class="pill '+(o.status==='CANCELADO'?'closed':'')+'">'+safe(o.status)+'</span></div><div class="source">'+origin+'</div><ul>'+items+'</ul>'+(o.customer_notes?'<p class="muted">Obs.: '+safe(o.customer_notes)+'</p>':'')+(o.cancellation_reason?'<p class="muted">Motivo: '+safe(o.cancellation_reason)+'</p>':'')+'<small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></article>';
+  }).join('')||'<p class="muted">Ainda não há pedidos nesta comanda.</p>';
+  if(selectedTableId){
+    const table=tables.find(t=>t.id===selectedTableId);
+    const tab=table?openByTable.get(table.id):null;
+    if(!table||!tab){activeSalonTableId=null;return loadSalonOverview();}
+    const tabOrders=ordersByTab.get(tab.id)||[];
+    const total=tabOrders.filter(o=>o.status!=='CANCELADO').reduce((sum,o)=>sum+Number(o.total_cents||0),0);
+    const rootId='salonComposer_'+tab.id.replace(/-/g,'');
+    const categoryButtons='<button type="button" class="active" data-category="all">Todas</button>'+categories.map(c=>'<button type="button" data-category="'+c.id+'">'+safe(c.name)+'</button>').join('');
+    $('roleContent').innerHTML=
+      '<div class="salon-screen-nav"><button type="button" class="secondary" id="salonBackTables">← Todas as mesas</button><button type="button" class="secondary" id="salonShowTab">Ver comanda · '+money(total)+'</button></div>'+
+      '<section class="card salon-menu-screen" id="salonMenuScreen"><h2>Cardápio · Mesa '+safe(table.table_number)+'</h2><p class="muted">Escolha os produtos como no cardápio do cliente. O pedido será adicionado diretamente à comanda aberta.</p>'+
+      '<div class="salon-composer" id="'+rootId+'" data-salon-composer="'+tab.id+'" data-table-id="'+table.id+'" data-table-number="'+safe(table.table_number)+'"><div class="salon-categories">'+categoryButtons+'</div><div class="salon-products"></div></div></section>'+
+      '<section class="card salon-cart-screen hidden" id="salonCartScreen"><div class="salon-screen-nav"><button type="button" class="secondary salon-cart-back">← Voltar ao cardápio</button><strong>Mesa '+safe(table.table_number)+'</strong></div><div class="salon-cart"></div></section>'+
+      '<section class="card hidden" id="salonTabScreen"><div class="salon-screen-nav"><button type="button" class="secondary" id="salonTabBack">← Voltar ao cardápio</button><strong>Comanda · Mesa '+safe(table.table_number)+'</strong></div><div class="top"><strong>Total acumulado</strong><strong>'+money(total)+'</strong></div>'+historyHtml(tabOrders)+'<label>Forma de pagamento na saída</label><select id="salonPayment"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button class="danger full" id="salonCloseTab">Fechar conta e liberar mesa</button></section>'+
+      '<button type="button" class="primary salon-cart-open hidden">Carrinho</button>';
+    const root=$(rootId);
+    bindSalonComposer(root,tab.id,products,categories,accompByProduct);
+    $('salonBackTables').addEventListener('click',()=>loadSalonOverview());
+    $('salonShowTab').addEventListener('click',()=>{$('salonMenuScreen').classList.add('hidden');$('salonCartScreen').classList.add('hidden');$('salonTabScreen').classList.remove('hidden');$('salon-cart-open')?.classList.add('hidden');});
+    $('salonTabBack').addEventListener('click',()=>{$('salonTabScreen').classList.add('hidden');$('salonMenuScreen').classList.remove('hidden');});
+    $('salonCloseTab').addEventListener('click',async()=>{
+      const payment=$('salonPayment').value;
+      if(!confirm('Confirma o recebimento em '+payment+' e o fechamento da conta da Mesa '+table.table_number+'?'))return;
+      const btn=$('salonCloseTab');btn.disabled=true;
+      const {data,error}=await supabase.rpc('close_dining_tab_with_payment',{p_tab_id:tab.id,p_payment_method:payment,p_closing_note:null});
+      if(error){alert(error.message);btn.disabled=false;return;}
+      alert('Mesa '+table.table_number+' fechada. Total recebido: '+money(data.total_cents)+'. Comprovante enviado à fila da impressora.');
+      activeSalonTableId=null;await loadSalonOverview();
+    });
+    const cartOpen=$('roleContent').querySelector('.salon-cart-open');
+    cartOpen.addEventListener('click',()=>{$('salonMenuScreen').classList.add('hidden');$('salonCartScreen').classList.remove('hidden');});
+    return;
+  }
   const cards=tables.map(t=>{
     const tab=openByTable.get(t.id),tabOrders=tab?(ordersByTab.get(tab.id)||[]):[];
-    const total=tabOrders.reduce((sum,o)=>sum+Number(o.total_cents||0),0);
-    const orderHtml=tabOrders.map(o=>'<div class="table-card"><div class="top"><strong>Pedido #'+safe(o.order_number)+'</strong><span class="pill '+(o.status==='CANCELADO'?'closed':'')+'">'+safe(o.status)+'</span></div><ul>'+((o.order_items||[]).map(i=>'<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?' · '+safe(i.notes):'')+((i.order_item_accompaniments||[]).map(a=>'<div class="muted">Prato '+safe(a.unit_index)+': '+safe(a.accompaniment_name)+'</div>').join(''))+'</li>').join(''))+'</ul>'+(o.customer_notes?'<p class="muted">Obs.: '+safe(o.customer_notes)+'</p>':'')+(o.cancellation_reason?'<p class="muted">Motivo: '+safe(o.cancellation_reason)+'</p>':'')+(['RECEBIDO','AGUARDANDO_APROVACAO'].includes(o.status)?'<div class="actions"><button class="primary salon-order-action" data-action="APPROVE" data-order="'+o.id+'">Aceitar e imprimir</button><button class="danger salon-order-action" data-action="REJECT" data-order="'+o.id+'">Recusar</button></div>':'')+'<small class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</small></div>').join('');
-    const categoryButtons='<button type="button" class="active" data-category="all">Todas</button>'+categories.map(c=>'<button type="button" data-category="'+c.id+'">'+safe(c.name)+'</button>').join('');
-    const composer=tab?'<section class="salon-composer" data-salon-composer="'+tab.id+'" data-table-number="'+safe(t.table_number)+'"><h3>Novo pedido · Mesa '+safe(t.table_number)+'</h3><p class="muted">Escolha os produtos, monte o carrinho e confira antes de enviar.</p><div class="salon-categories">'+categoryButtons+'</div><div class="salon-products"></div><div class="salon-cart"></div></section>':'';
-    const body=tab?'<p><strong>Total acumulado da comanda: '+money(total)+'</strong></p>'+(orderHtml||'<p class="muted">Ainda não há itens nesta comanda.</p>')+composer+'<label>Forma de pagamento na saída</label><select class="salon-payment" data-tab="'+tab.id+'"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button class="danger full salon-close" data-tab="'+tab.id+'">Fechar conta e liberar mesa</button>'
-      :'<p class="muted">Mesa sem comanda aberta.</p>'+(t.active?'<button class="primary salon-open" data-table="'+t.id+'">Abrir comanda</button>':'<span class="pill closed">Mesa inativa</span>');
-    const tableSummary=tab?'<div class="table-total">Parcial da comanda: '+money(total)+'</div>':'<div class="table-total">Sem comanda aberta</div>';
-    return '<article class="order-card"><div class="table-heading"><strong class="table-number">Mesa '+safe(t.table_number)+'</strong><span class="pill table-state '+(tab?'':'closed')+'">'+(tab?'Ocupada':'Livre')+'</span></div>'+tableSummary+'<details class="table-details"><summary>'+(tab?'Abrir comanda':'Ações da mesa')+'</summary>'+body+'</details></article>';
+    const total=tabOrders.filter(o=>o.status!=='CANCELADO').reduce((sum,o)=>sum+Number(o.total_cents||0),0);
+    const qrNew=tabOrders.filter(o=>o.order_source==='CLIENT_QR'&&o.status!=='CANCELADO').length;
+    const status=tab?'EM USO':'LIVRE';
+    return '<button type="button" class="salon-table-tile '+(tab?'busy':'free')+'" data-table="'+t.id+'"><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+status+'</span>'+
+      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+tabOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' via QR Code':'')+'</span>':'<span class="meta">Disponível para receber clientes</span>')+
+      '<span class="meta">'+(tab?'Toque para abrir a mesa':'Toque para abrir comanda')+'</span></button>';
   }).join('');
-  $('roleContent').innerHTML='<div class="top"><h2>Salão · 10 mesas</h2><button class="secondary" id="refreshSalon">Atualizar</button></div><p class="muted">Os pedidos lançados aqui ficam vinculados à comanda aberta. O pagamento é realizado na saída. Impressão e QR Code do cliente serão integrados na próxima etapa.</p><div class="grid">'+(cards||'<p>Nenhuma mesa cadastrada.</p>')+'</div>';
-  $('refreshSalon').addEventListener('click',loadSalonOverview);
-  $('roleContent').querySelectorAll('[data-salon-composer]').forEach(root=>bindSalonComposer(root,root.dataset.salonComposer,products,categories,accompByProduct));
-  $('roleContent').querySelectorAll('.salon-open').forEach(btn=>btn.addEventListener('click',async()=>{
-    btn.disabled=true;const {error}=await supabase.rpc('open_dining_tab',{p_table_id:btn.dataset.table});
-    if(error){alert(error.message);btn.disabled=false;return;}await loadSalonOverview();
-  }));
-  $('roleContent').querySelectorAll('.salon-close').forEach(btn=>btn.addEventListener('click',async()=>{
-    const payment=$('roleContent').querySelector('.salon-payment[data-tab="'+btn.dataset.tab+'"]')?.value;
-    if(!payment)return;
-    if(!confirm('Confirma o recebimento do pagamento ('+payment+') e o fechamento desta conta? A mesa será liberada.'))return;
+  $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Mesas em ordem numérica · Vermelho: em uso · Verde: livre</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div>';
+  $('refreshSalon').addEventListener('click',()=>loadSalonOverview());
+  $('roleContent').querySelectorAll('[data-table]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const table=tables.find(t=>t.id===btn.dataset.table);if(!table)return;
+    const tab=openByTable.get(table.id);
+    if(tab){await loadSalonOverview(table.id);return;}
+    if(!table.active){alert('Esta mesa está inativa.');return;}
     btn.disabled=true;
-    const {data,error}=await supabase.rpc('close_dining_tab_with_payment',{p_tab_id:btn.dataset.tab,p_payment_method:payment,p_closing_note:null});
-    if(error){alert(error.message);btn.disabled=false;return;}
-    alert('Mesa '+(data.table_number||'')+' fechada. Total recebido: '+money(data.total_cents)+'. Conta enviada para a fila de impressão.');
-    await loadSalonOverview();
-  }));
-  $('roleContent').querySelectorAll('.salon-order-action').forEach(btn=>btn.addEventListener('click',async()=>{
-    let reason=null;
-    if(btn.dataset.action==='REJECT'){reason=window.prompt('Informe o motivo da recusa:');if(reason===null)return;if(reason.trim().length<3){alert('Informe um motivo com pelo menos 3 caracteres.');return;}}
-    btn.disabled=true;
-    const {error}=await supabase.rpc('set_salon_order_action',{p_order_id:btn.dataset.order,p_action:btn.dataset.action,p_reason:reason});
+    const {error}=await supabase.rpc('open_dining_tab',{p_table_id:table.id});
     if(error){alert(error.message);btn.disabled=false;return;}
     await loadSalonOverview();
   }));
-
 }
-
 async function loadDeliveryOrders(){
   const {data:orders,error}=await supabase.from('orders')
     .select('id,order_number,order_type,status,customer_name,customer_phone,delivery_address,payment_method,total_cents,needs_change,change_for_cents,customer_notes,cancellation_reason,created_at,order_items(id,product_name_snapshot,unit_price_cents,quantity,notes)')
