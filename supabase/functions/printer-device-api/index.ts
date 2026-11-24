@@ -22,6 +22,15 @@ function randomToken() {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+async function requeuePrintJob(db: ReturnType<typeof createClient>, jobId: string, message: string) {
+  const retryAt = new Date(Date.now() + 15000).toISOString();
+  const { error } = await db.from("print_jobs").update({
+    status: "PENDENTE", claimed_at: null, device_id: null,
+    next_attempt_at: retryAt, last_error: message
+  }).eq("id", jobId).eq("status", "PROCESSANDO");
+  return !error;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return reply({ error: "Método não permitido" }, 405);
@@ -219,24 +228,24 @@ Deno.serve(async (req: Request) => {
         const { data: tab, error: tabError } = await db.from("dining_tabs")
           .select("id, table_id, paid_total_cents, payment_method, closed_at")
           .eq("id", claimed.dining_tab_id).maybeSingle();
-        if (tabError || !tab) return reply({ error: "Comanda fechada não encontrada." }, 500);
+        if (tabError || !tab) { await requeuePrintJob(db, claimed.id, "Comanda não encontrada; nova tentativa programada."); return reply({ error: "Comanda fechada não encontrada." }, 500); }
         const { data: table, error: tableError } = await db.from("restaurant_tables")
           .select("table_number").eq("id", tab.table_id).maybeSingle();
-        if (tableError || !table) return reply({ error: "Mesa não encontrada." }, 500);
+        if (tableError || !table) { await requeuePrintJob(db, claimed.id, "Mesa não encontrada; nova tentativa programada."); return reply({ error: "Mesa não encontrada." }, 500); }
         const { data: orders, error: ordersError } = await db.from("orders")
           .select("id, order_number, total_cents, customer_notes, created_at")
           .eq("dining_tab_id", tab.id).neq("status", "CANCELADO").order("created_at", { ascending: true });
-        if (ordersError) return reply({ error: "Não foi possível carregar os pedidos da comanda." }, 500);
+        if (ordersError) { await requeuePrintJob(db, claimed.id, "Falha ao carregar pedidos da comanda; nova tentativa programada."); return reply({ error: "Não foi possível carregar os pedidos da comanda." }, 500); }
         const orderIds = (orders ?? []).map((o: { id: string }) => o.id);
         const { data: items, error: itemsError } = orderIds.length
           ? await db.from("order_items").select("id, order_id, product_name_snapshot, unit_price_cents, quantity, notes").in("order_id", orderIds)
           : { data: [], error: null };
-        if (itemsError) return reply({ error: "Não foi possível carregar os itens da comanda." }, 500);
+        if (itemsError) { await requeuePrintJob(db, claimed.id, "Falha ao carregar itens da comanda; nova tentativa programada."); return reply({ error: "Não foi possível carregar os itens da comanda." }, 500); }
         const itemIds = (items ?? []).map((i: { id: string }) => i.id);
         const { data: accompaniments, error: accError } = itemIds.length
           ? await db.from("order_item_accompaniments").select("order_item_id, accompaniment_name, unit_index").in("order_item_id", itemIds)
           : { data: [], error: null };
-        if (accError) return reply({ error: "Não foi possível carregar os acompanhamentos." }, 500);
+        if (accError) { await requeuePrintJob(db, claimed.id, "Falha ao carregar acompanhamentos da comanda; nova tentativa programada."); return reply({ error: "Não foi possível carregar os acompanhamentos." }, 500); }
         const order = { order_type: "TAB_CLOSE", table_number: table.table_number,
           total_cents: tab.paid_total_cents ?? 0, payment_method: tab.payment_method,
           created_at: tab.closed_at, order_count: orders?.length ?? 0 };
