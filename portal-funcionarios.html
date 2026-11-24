@@ -185,10 +185,15 @@ function bindSalonComposer(root,tabId,products,categories,accompByProduct){
    const {data,error}=await supabase.rpc('create_salon_order',{p_tab_id:tabId,p_items:payload,p_customer_notes:cart.notes});
    if(error){alert(error.message);btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO PARA ESTA MESA';return;}
    salonCarts.delete(tabId);
+   root.querySelector('.salon-menu-screen')?.classList.add('hidden');
    root.querySelector('.salon-cart-screen')?.classList.add('hidden');
-   root.querySelector('.salon-menu-screen')?.classList.remove('hidden');
-   alert('Pedido #'+data.order_number+' adicionado à comanda da Mesa '+root.dataset.tableNumber+'. Total: '+money(data.total_cents));
-   await loadSalonOverview(tabId);
+   const success=root.querySelector('.salon-success-screen');
+   success?.classList.remove('hidden');
+   if(success){
+    success.querySelector('.salon-success-text').textContent='Pedido #'+data.order_number+' · Mesa '+root.dataset.tableNumber+' · Total '+money(data.total_cents)+'. O pedido já foi registrado e enviado para a fila de impressão.';
+    success.querySelector('.salon-success-menu').addEventListener('click',()=>loadSalonOverview(root.dataset.tableId),{once:true});
+    success.querySelector('.salon-success-tab').addEventListener('click',async()=>{await loadSalonOverview(root.dataset.tableId);$('salonShowTab')?.click();},{once:true});
+   }
   }
  });
  root.querySelector('.salon-cart')?.addEventListener('change',e=>{
