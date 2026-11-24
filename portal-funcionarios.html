@@ -176,7 +176,7 @@ function bindSalonComposer(root,tabId,products,categories,accompByProduct){
  });
  root.querySelector('.salon-cart')?.addEventListener('click',async e=>{
   const adjust=e.target.closest('.salon-cart-adjust'),remove=e.target.closest('.salon-cart-remove');
-  if(adjust){const item=cart.items.get(adjust.dataset.product);if(!item)return;const delta=Number(adjust.dataset.delta);if(delta>0)item.units.push([]);else item.units.pop();if(!item.units.length)cart.items.delete(adjust.dataset.product);renderSalonCart(root,tabId,cart,products,accompByProduct);return;}
+  if(adjust){const item=cart.items.get(adjust.dataset.product);if(!item)return;const delta=Number(adjust.dataset.delta);if(delta>0){if(item.units.length>=Number(item.product.stock_quantity||0)){alert('Limite de estoque atingido para este produto.');return;}item.units.push([]);}else item.units.pop();if(!item.units.length)cart.items.delete(adjust.dataset.product);renderSalonCart(root,tabId,cart,products,accompByProduct);return;}
   if(remove){cart.items.delete(remove.dataset.product);renderSalonCart(root,tabId,cart,products,accompByProduct);return;}
   if(e.target.closest('.salon-submit')){
    const count=[...cart.items.values()].reduce((n,x)=>n+x.units.length,0);if(!count)return;
