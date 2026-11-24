@@ -13,7 +13,7 @@ begin
   end if;
   return new;
 end;
-$source$$;
+$source$;
 -- Trigger-only function: callers must not invoke it through the Data API.
 revoke all on function public.mark_salon_order_source() from public, anon, authenticated;
 drop trigger if exists orders_mark_salon_source on public.orders;
@@ -205,7 +205,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 -- Trigger-only function: keep execution unavailable to API roles.
 revoke all on function public.notify_printer_queue_realtime() from public, anon, authenticated;
 
