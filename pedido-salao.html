@@ -16,6 +16,12 @@ button,select,input,textarea{font:inherit}button{border:0;border-radius:10px;pad
  #tableTitle{font-size:30px;font-weight:950;color:var(--red);letter-spacing:-.6px}#cartFeedback{min-height:18px;color:#16723a;font-size:13px;margin:4px 0 10px}footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 .employee-nav{display:flex;gap:8px;margin:0 0 14px}.employee-nav button{flex:1}.employee-bill-line{border-bottom:1px solid var(--line);padding:12px 0}.employee-source{font-size:11px;font-weight:850;color:var(--red)}#cartDock{position:fixed;z-index:30;left:14px;right:14px;bottom:14px;width:calc(100% - 28px);box-shadow:0 8px 28px #20263835;font-size:16px}
 .employee-total{font-size:22px;font-weight:900;text-align:right;padding:12px 0}
+.customer-category-nav{position:sticky;top:0;z-index:12;display:flex;flex-wrap:nowrap;gap:7px;overflow-x:auto;overscroll-behavior-x:contain;white-space:nowrap;background:#fff;padding:9px 2px;margin:0 0 16px;border-bottom:1px solid var(--line);box-shadow:0 5px 14px #20263810;scrollbar-width:none}
+.customer-category-nav::-webkit-scrollbar{display:none}
+.customer-category-nav button{flex:0 0 auto;padding:9px 13px;border:1px solid #e7e9ee;border-radius:999px;background:#f1f2f5;color:#454b57;font-size:12px;font-weight:800}
+.customer-category-nav button[aria-current="true"]{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 4px 12px #b5121b25}
+.menu-category-section{scroll-margin-top:78px;margin:0 0 26px}
+.menu-category-section>h3{font-size:18px;font-weight:900;margin:0 0 12px;color:#292c33}
 @media(max-width:520px){main{margin:13px auto}.card{padding:14px}.products{grid-template-columns:1fr}.product img{width:76px;height:76px}}
 </style>
 </head>
@@ -25,7 +31,7 @@ button,select,input,textarea{font:inherit}button{border:0;border-radius:10px;pad
 <section class="card"><h2 id="tableTitle">Carregando mesa...</h2><p id="tableMessage" class="muted">Validando QR Code.</p><div id="closedNotice" class="notice hidden">Esta mesa ainda não está recebendo pedidos. Chame um funcionário para abrir a comanda.</div></section>
 <section id="customerAccount" class="card hidden"><h2>Minha conta da mesa</h2><p id="customerAccountStatus" class="muted">Confira o total acumulado da sua mesa.</p><div id="customerAccountTotal" class="total">R$ 0,00</div><button id="requestCloseAccount" type="button" style="width:100%">Solicitar fechamento da conta</button><p id="customerAccountHelp" class="muted">Ao solicitar o fechamento, a mesa ficará bloqueada para novos pedidos até o pagamento no caixa.</p></section>
 <nav id="employeeNav" class="employee-nav hidden"><button id="employeeGoTables" class="secondary" type="button">Mesas</button><button id="employeeGoMenu" type="button">Cardápio</button><button id="employeeGoBill" class="secondary" type="button">Comanda</button></nav><div id="employeeLiveNotice" class="notice hidden" aria-live="polite"></div>
-<section id="menuSection" class="card hidden"><h2>Cardápio</h2><label for="categoryFilter">Categoria</label><select id="categoryFilter"><option value="">Todas as categorias</option></select><div id="products" class="products"></div></section>
+<section id="menuSection" class="card hidden"><h2>Cardápio</h2><nav id="customerCategoryNav" class="customer-category-nav hidden" aria-label="Categorias do cardápio"></nav><div id="employeeCategoryFilter" class="hidden"><label for="categoryFilter">Categoria</label><select id="categoryFilter"><option value="">Todas as categorias</option></select></div><div id="products" class="products"></div></section>
 <section id="employeeBill" class="card hidden"><h2>Comanda da mesa</h2><div id="employeeBillHistory"></div><div class="employee-total" id="employeeBillTotal">R$ 0,00</div><label for="employeePayment">Forma de pagamento na saída</label><select id="employeePayment"><option value="DINHEIRO">Dinheiro</option><option value="PIX">Pix</option><option value="CARTAO">Cartão</option></select><button id="employeeCloseBill" style="width:100%;margin-top:14px">Fechar conta e liberar mesa</button><button id="employeeReopenTab" class="secondary hidden" type="button" style="width:100%;margin-top:9px">Cancelar solicitação e reabrir comanda</button></section>
 <section id="cartSection" class="card hidden"><h2 id="cartHeading">Seu pedido (0 itens)</h2><p id="cartFeedback" aria-live="polite"></p><div id="cart"></div><button id="employeeBackMenu" class="secondary hidden" type="button" style="width:100%;margin-bottom:10px">← Voltar ao cardápio</button><label for="notes">Observação para a equipe (opcional)</label><textarea id="notes" rows="2" maxlength="300" placeholder="Alguma orientação?"></textarea><div id="total" class="total">R$ 0,00</div><button id="sendOrder" style="width:100%">Enviar pedido para a mesa</button><p class="muted">O pagamento será feito na saída, junto com a conta da mesa.</p></section>
 <section id="success" class="card hidden"><h2>Pedido realizado com sucesso!</h2><p id="successText"></p><div id="successItems"></div><p class="muted">Seu pedido foi aceito automaticamente e enviado para a cozinha. Você pode continuar escolhendo outros itens.</p><button id="continue" style="width:100%">Continuar escolhendo</button></section>
@@ -85,7 +91,8 @@ async function initQrMode(){
  categories=cr.data||[];products=pr.data||[];
  (ar.data||[]).forEach(a=>{if(!accompaniments.has(a.product_id))accompaniments.set(a.product_id,[]);accompaniments.get(a.product_id).push(a.name)});
  $('categoryFilter').innerHTML='<option value="">Todas as categorias</option>'+categories.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('');
- $('menuSection').classList.remove('hidden');renderProducts();
+ $('employeeCategoryFilter').classList.remove('hidden');
+ $('menuSection').classList.remove('hidden');$('customerCategoryNav').classList.remove('hidden');renderProducts();
  $('cartDock').addEventListener('click',()=>{$('cartSection').scrollIntoView({behavior:'smooth',block:'start'});});
  window.addEventListener('scroll',()=>{const r=$('cartSection').getBoundingClientRect();const inView=r.top<window.innerHeight&&r.bottom>0;$('cartDock').classList.toggle('hidden',!cart.size||inView);},{passive:true});
 }
@@ -204,10 +211,96 @@ async function init(){
  if(employeeMode){await initEmployeeMode();return;}
  await initQrMode();
 }
+function salonCategoryKey(name){
+ const value=norm(name);
+ if(['quentinha','quentinhas'].includes(value))return 'quentinha';
+ if(['sobremesa','sobremesas'].includes(value))return 'sobremesa';
+ if(['porcao','porcoes'].includes(value))return 'porcao';
+ if(['bebida','bebidas'].includes(value))return 'bebida';
+ return '';
+}
+function salonCategoryLabel(key){
+ return ({quentinha:'Cardápio',sobremesa:'Sobremesas',porcao:'Porções',bebida:'Bebidas'})[key]||'';
+}
+function getCustomerMenuCategories(){
+ const rank={quentinha:0,sobremesa:1,porcao:2,bebida:3};
+ return categories.filter(c=>salonCategoryKey(c.name)).sort((a,b)=>rank[salonCategoryKey(a.name)]-rank[salonCategoryKey(b.name)]);
+}
+function setCustomerActiveCategory(categoryId){
+ const nav=$('customerCategoryNav');
+ nav.querySelectorAll('button[data-category-id]').forEach(button=>{
+  const active=button.dataset.categoryId===categoryId;
+  button.classList.toggle('active',active);
+  button.setAttribute('aria-current',active?'true':'false');
+  if(active){
+   const left=button.offsetLeft-(nav.clientWidth-button.clientWidth)/2;
+   nav.scrollTo({left:Math.max(0,left),behavior:'smooth'});
+  }
+ });
+}
+function bindCustomerCategoryScroll(ordered){
+ if(window.salonCategoryScrollHandler){
+  window.removeEventListener('scroll',window.salonCategoryScrollHandler);
+  window.removeEventListener('resize',window.salonCategoryScrollHandler);
+ }
+ let frame=0;
+ const update=()=>{
+  if(frame)return;
+  frame=requestAnimationFrame(()=>{
+   frame=0;
+   const sections=ordered.map(c=>document.getElementById('menu-category-'+c.id)).filter(Boolean);
+   if(!sections.length)return;
+   const atBottom=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-6;
+   let active=sections[0];
+   if(atBottom)active=sections[sections.length-1];
+   else{
+    const navBottom=$('customerCategoryNav').getBoundingClientRect().bottom;
+    const activationLine=Math.max(70,navBottom+18);
+    for(const section of sections){
+     if(section.getBoundingClientRect().top<=activationLine)active=section;
+     else break;
+    }
+   }
+   setCustomerActiveCategory(active.id.replace('menu-category-',''));
+  });
+ };
+ window.salonCategoryScrollHandler=update;
+ window.addEventListener('scroll',update,{passive:true});
+ window.addEventListener('resize',update,{passive:true});
+ update();
+}
+function productCardMarkup(p){
+ return '<article class="product">'+(p.photo_url?'<img loading="lazy" src="'+esc(p.photo_url)+'" alt="'+esc(p.name)+'">':'')+'<div class="product-info"><h3>'+esc(p.name)+'</h3><div class="muted">'+esc(p.description||'')+'</div><div class="price">'+money(p.price_cents)+'</div></div><button data-add="'+p.id+'">Adicionar</button></article>';
+}
 function renderProducts(){
- const category=$('categoryFilter').value,list=products.filter(p=>(!category||p.category_id===category)&&p.stock_quantity>0);
- $('products').innerHTML=list.map(p=>'<article class="product">'+(p.photo_url?'<img loading="lazy" src="'+esc(p.photo_url)+'" alt="'+esc(p.name)+'">':'')+'<div class="product-info"><h3>'+esc(p.name)+'</h3><div class="muted">'+esc(p.description||'')+'</div><div class="price">'+money(p.price_cents)+'</div></div><button data-add="'+p.id+'">Adicionar</button></article>').join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>';
- $('products').querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',()=>addProduct(b.dataset.add)));
+ const root=$('products');
+ if(employeeMode){
+  $('customerCategoryNav').classList.add('hidden');
+  $('employeeCategoryFilter').classList.remove('hidden');
+  const category=$('categoryFilter').value;
+  const list=products.filter(p=>(!category||p.category_id===category)&&p.stock_quantity>0);
+  root.className='products';
+  root.innerHTML=list.map(productCardMarkup).join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>';
+ }else{
+  $('employeeCategoryFilter').classList.add('hidden');
+  const nav=$('customerCategoryNav');
+  nav.classList.remove('hidden');
+  const ordered=getCustomerMenuCategories();
+  nav.innerHTML=ordered.map(c=>'<button type="button" data-category-id="'+c.id+'" aria-current="false">'+salonCategoryLabel(salonCategoryKey(c.name))+'</button>').join('');
+  root.className='';
+  root.innerHTML=ordered.map(c=>{
+   const key=salonCategoryKey(c.name);
+   const items=products.filter(p=>p.category_id===c.id&&p.stock_quantity>0);
+   return '<section class="menu-category-section" id="menu-category-'+c.id+'"><h3>'+salonCategoryLabel(key)+'</h3><div class="products">'+(items.map(productCardMarkup).join('')||'<p class="muted">Nenhum produto disponível nesta categoria.</p>')+'</div></section>';
+  }).join('')||'<p class="muted">Nenhuma categoria disponível no momento.</p>';
+  nav.querySelectorAll('button[data-category-id]').forEach(button=>button.addEventListener('click',()=>{
+   const section=document.getElementById('menu-category-'+button.dataset.categoryId);
+   setCustomerActiveCategory(button.dataset.categoryId);
+   section?.scrollIntoView({behavior:'smooth',block:'start'});
+  }));
+  bindCustomerCategoryScroll(ordered);
+ }
+ root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>addProduct(button.dataset.add)));
 }
 function addProduct(id){
  const p=products.find(x=>x.id===id);if(!p)return;
