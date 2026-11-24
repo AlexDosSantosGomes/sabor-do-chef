@@ -346,3 +346,34 @@ begin
   );
 end;
 $close$;
+
+
+-- Enforce the accompaniment rule at the database boundary, not only in the browser.
+create or replace function public.ensure_order_accompaniment_is_quentinha()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $accomp$
+declare
+  v_category_name text;
+begin
+  select lower(trim(c.name))
+    into v_category_name
+    from public.order_items oi
+    join public.products p on p.id = oi.product_id
+    join public.categories c on c.id = p.category_id
+   where oi.id = new.order_item_id;
+
+  if v_category_name not in ('quentinha', 'quentinhas') then
+    raise exception 'Acompanhamentos só podem ser adicionados às Quentinhas.';
+  end if;
+
+  return new;
+end;
+$accomp$;
+
+revoke all on function public.ensure_order_accompaniment_is_quentinha() from public, anon, authenticated;
+drop trigger if exists order_accompaniments_only_quentinha on public.order_item_accompaniments;
+create trigger order_accompaniments_only_quentinha
+before insert on public.order_item_accompaniments
+for each row execute function public.ensure_order_accompaniment_is_quentinha();
