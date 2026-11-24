@@ -40,10 +40,10 @@ class RealtimePrintListener(
     }
 
     /**
-     * Wait for a Realtime wake-up, but never block forever.
-     * The pending latch closes the check-to-wait race; the timeout is a safety
-     * net for dropped broadcasts or a socket that appears connected but is stale.
-     * On timeout, the worker checks the authenticated queue again.
+     * Wait for a Realtime/lifecycle wake-up. While connected and idle, this
+     * intentionally waits without periodic database checks. The pending latch
+     * closes the check-to-wait race. Positive timeouts are used only for
+     * bounded disconnected recovery or a server-scheduled retry.
      */
     fun awaitSignal(timeoutMs: Long = 0L): Boolean {
         // timeoutMs <= 0 means wait only for an actual Realtime/lifecycle signal.
