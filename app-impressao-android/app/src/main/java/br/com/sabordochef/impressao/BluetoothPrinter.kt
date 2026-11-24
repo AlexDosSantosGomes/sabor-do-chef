@@ -57,6 +57,7 @@ object BluetoothPrinter {
             socket.outputStream.flush()
         } catch (error: Exception) {
             closeLocked()
+            pairedPrinter = null
             if (error is IOException) throw error
             throw IOException(error.message ?: "Falha na conexão Bluetooth.", error)
         }
