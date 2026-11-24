@@ -135,7 +135,7 @@ async function loadSalonOverview(){
   $('roleContent').innerHTML='<p class="muted">Carregando mesas e comandas...</p>';
   const [tr,tabr]=await Promise.all([
     supabase.from('restaurant_tables').select('id,table_number,active').order('table_number'),
-    supabase.from('dining_tabs').select('id,table_id,status,opened_at').eq('status','OPEN')
+    supabase.from('dining_tabs').select('id,table_id,status,opened_at,payment_requested_at').in('status',['OPEN','PAYMENT_REQUESTED'])
   ]);
   if(tr.error)throw tr.error;if(tabr.error)throw tabr.error;
   const tables=(tr.data||[]).slice().sort((a,b)=>Number(a.table_number)-Number(b.table_number));
@@ -162,8 +162,9 @@ async function loadSalonOverview(){
     const total=activeOrders.reduce((sum,o)=>sum+Number(o.total_cents||0),0);
     const qrNew=activeOrders.filter(o=>o.order_source==='CLIENT_QR'&&['APROVADO','ENVIADO_IMPRESSAO','FALHA_IMPRESSAO'].includes(o.status)).length;
     const inactive=!t.active;
-    return '<button type="button" class="salon-table-tile '+(tab?'busy':inactive?'inactive':'free')+'" data-table="'+t.id+'" '+(inactive&&!tab?'disabled':'')+'><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+(tab?'EM USO':inactive?'INATIVA':'LIVRE')+'</span>'+
-      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+activeOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>':inactive?'<span class="meta">Mesa desativada no cadastro</span>':'<span class="meta">Disponível para receber clientes</span>')+
+    const pendingPayment=tab?.status==='PAYMENT_REQUESTED';
+    return '<button type="button" class="salon-table-tile '+(tab?(pendingPayment?'busy payment-pending':'busy'):inactive?'inactive':'free')+'" data-table="'+t.id+'" '+(inactive&&!tab?'disabled':'')+'><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+(pendingPayment?'AGUARDANDO PAGAMENTO':tab?'EM USO':inactive?'INATIVA':'LIVRE')+'</span>'+
+      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+activeOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>'+(pendingPayment?'<span class="meta">Cliente solicitou fechamento · aguarda caixa</span>':''):inactive?'<span class="meta">Mesa desativada no cadastro</span>':'<span class="meta">Disponível para receber clientes</span>')+
       '<span class="meta">'+(tab?'Toque para abrir a mesa':inactive?'':'Toque para abrir comanda')+'</span></button>';
   }).join('');
   $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Mesas em ordem numérica · Vermelho: em uso · Verde: livre</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div>';
