@@ -1,5 +1,22 @@
 -- QR do Salão: pedidos do cliente são aprovados automaticamente e entram na fila existente.
 -- Preserva validações de estoque, acompanhamentos por unidade e limite de 2 acompanhamentos.
+alter table public.orders add column if not exists order_source text not null default 'STAFF';
+alter table public.orders drop constraint if exists orders_order_source_check;
+alter table public.orders add constraint orders_order_source_check
+  check (order_source in ('CLIENT_QR','STAFF'));
+
+create or replace function public.mark_salon_order_source()
+returns trigger language plpgsql security definer set search_path=public,pg_temp as $
+begin
+  if new.order_type='SALAO'::public.order_type then
+    new.order_source := case when auth.uid() is null then 'CLIENT_QR' else 'STAFF' end;
+  end if;
+  return new;
+end;
+$;
+drop trigger if exists orders_mark_salon_source on public.orders;
+create trigger orders_mark_salon_source before insert on public.orders
+for each row execute function public.mark_salon_order_source();
 create or replace function public.create_salon_qr_order(
   p_qr_token uuid,
   p_items jsonb,
@@ -98,12 +115,12 @@ begin
   insert into public.orders(
     order_type, status, table_id, dining_tab_id, customer_name,
     payment_method, total_cents, needs_change, change_for_cents,
-    customer_notes, approved_at, approved_by
+    customer_notes, approved_at, approved_by, order_source
   )
   values(
     'SALAO', 'APROVADO', v_table_id, v_tab_id, null,
     'PAGAMENTO_NA_SAIDA', v_total, false, null,
-    nullif(trim(coalesce(p_customer_notes, '')), ''), now(), null
+    nullif(trim(coalesce(p_customer_notes, '')), ''), now(), null, 'CLIENT_QR'
   )
   returning id, order_number into v_order_id, v_order_number;
 
