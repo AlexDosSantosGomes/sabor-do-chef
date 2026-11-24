@@ -88,7 +88,14 @@ class PrintService : Service() {
                     updateNotification("Central ativa — aguardando pedidos")
                     // While Realtime is healthy, wait for its next event instead of polling.
                     // If the socket is down, perform a bounded recovery check until it reconnects.
-                    val waitMs = if (realtimeListener?.isConnected == true) 86_400_000L else 15_000L
+                    val retryAt = response.optString("retry_at").takeIf { it.isNotBlank() && it != "null" }
+                    val retryDelayMs = retryAt?.let {
+                        try {
+                            (java.time.Instant.parse(it).toEpochMilli() - System.currentTimeMillis()).coerceAtLeast(1000L)
+                        } catch (_: Exception) { 30_000L }
+                    }
+                    val defaultWaitMs = if (realtimeListener?.isConnected == true) 86_400_000L else 15_000L
+                    val waitMs = retryDelayMs?.coerceAtMost(86_400_000L) ?: defaultWaitMs
                     if (realtimeListener != null) realtimeListener?.awaitSignal(waitMs)
                     else Thread.sleep(waitMs)
                     continue
