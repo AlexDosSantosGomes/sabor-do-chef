@@ -18,8 +18,9 @@ drop trigger if exists orders_mark_salon_source on public.orders;
 create trigger orders_mark_salon_source before insert on public.orders
 for each row execute function public.mark_salon_order_source();
 
--- Garante que pedidos SALAO aprovados no INSERT entrem na mesma fila do APK.
--- O índice único por order_id protege contra duplicidade caso já exista trigger legado.
+-- Mantém um único trigger de enfileiramento. A instalação anterior usa
+-- trg_enqueue_delivery_print_job; removemos os nomes conhecidos antes de padronizar.
+drop trigger if exists trg_enqueue_delivery_print_job on public.orders;
 drop trigger if exists orders_enqueue_print_job_auto on public.orders;
 create trigger orders_enqueue_print_job_auto
 after insert or update of status on public.orders
