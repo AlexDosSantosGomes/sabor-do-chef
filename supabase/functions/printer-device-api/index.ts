@@ -220,39 +220,48 @@ Deno.serve(async (req: Request) => {
         }
         const [ordersResult, tabsResult] = await Promise.all([
           db.from("orders")
-            .select("order_type,payment_method,total_cents")
+            .select("order_number,order_type,payment_method,total_cents,created_at")
             .eq("status", "ENTREGUE")
             .in("order_type", ["DELIVERY", "PICKUP"])
             .gte("created_at", start.toISOString())
-            .lt("created_at", end.toISOString()),
+            .lt("created_at", end.toISOString())
+            .order("created_at", { ascending: true }),
           db.from("dining_tabs")
-            .select("payment_method,paid_total_cents")
+            .select("payment_method,paid_total_cents,closed_at,restaurant_tables(table_number)")
             .eq("status", "CLOSED")
             .not("paid_total_cents", "is", null)
             .not("payment_method", "is", null)
             .gte("closed_at", start.toISOString())
             .lt("closed_at", end.toISOString())
+            .order("closed_at", { ascending: true })
         ]);
         if (ordersResult.error || tabsResult.error) {
           await db.from("print_jobs").update({ status: "PENDENTE", claimed_at: null, device_id: null, next_attempt_at: new Date(Date.now() + 30000).toISOString(), last_error: "Falha ao consultar as vendas do fechamento diário." }).eq("id", claimed.id);
           return reply({ error: "Não foi possível calcular as vendas do dia." }, 500);
         }
 
-        const sales = [
-          ...(ordersResult.data ?? []).map((sale: any) => ({
-            source: sale.order_type === "PICKUP" ? "RETIRADA" : "DELIVERY",
-            total_cents: Number(sale.total_cents ?? 0),
-            payment_method: sale.payment_method
-          })),
-          ...(tabsResult.data ?? []).map((tab: any) => ({
-            source: "SALAO",
-            total_cents: Number(tab.paid_total_cents ?? 0),
-            payment_method: tab.payment_method
-          }))
-        ];
+        const deliveryAndPickup = (ordersResult.data ?? []).map((sale: any) => ({
+          source: sale.order_type === "PICKUP" ? "RETIRADA" : "DELIVERY",
+          order_number: sale.order_number,
+          total_cents: Number(sale.total_cents ?? 0),
+          payment_method: sale.payment_method,
+          created_at: sale.created_at
+        }));
+        const salon = (tabsResult.data ?? []).map((tab: any) => ({
+          source: "SALAO",
+          table_number: tab.restaurant_tables?.table_number ?? "N/I",
+          total_cents: Number(tab.paid_total_cents ?? 0),
+          payment_method: tab.payment_method,
+          created_at: tab.closed_at
+        }));
+        const sales = [...deliveryAndPickup, ...salon].sort(
+          (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
 
         const modalityTotals = { delivery: 0, salon: 0, pickup: 0 };
         const paymentTotals = { cash: 0, pix: 0, card: 0, other: 0 };
+        const legacyTotals = { cash: 0, pix: 0, card: 0, other: 0 };
+        const counts = { cash: 0, pix: 0, card: 0, other: 0 };
         let totalCents = 0;
 
         for (const sale of sales) {
@@ -270,6 +279,8 @@ Deno.serve(async (req: Request) => {
                 ? "card"
                 : "other";
           paymentTotals[paymentKey as keyof typeof paymentTotals] += amount;
+          legacyTotals[paymentKey as keyof typeof legacyTotals] += amount;
+          counts[paymentKey as keyof typeof counts] += 1;
         }
 
         return reply({
@@ -279,6 +290,9 @@ Deno.serve(async (req: Request) => {
             attempt_count: claimed.attempt_count,
             report: {
               report_date: reportDate,
+              sales,
+              totals: legacyTotals,
+              counts,
               modality_totals: modalityTotals,
               payment_totals: paymentTotals,
               total_cents: totalCents
