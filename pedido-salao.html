@@ -117,10 +117,12 @@ async function initEmployeeMode(){
  });
  try{await loadMenuData();}catch(e){$('tableMessage').textContent=e.message||'Não foi possível carregar o cardápio.';return;}
  employeeRealtimeChannel=db.channel('employee-tab-'+employeeTabId)
-  .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders',filter:'dining_tab_id=eq.'+employeeTabId},()=>{
+  .on('postgres_changes',{event:'*',schema:'public',table:'orders',filter:'dining_tab_id=eq.'+employeeTabId},payload=>{
    loadEmployeeBill();
-   $('employeeLiveNotice').textContent='Novo pedido recebido na Mesa '+tableNumber+'. Abra a comanda para conferir os itens.';
-   $('employeeLiveNotice').classList.remove('hidden');
+   if(payload.eventType==='INSERT'&&payload.new?.order_source==='CLIENT_QR'){
+    $('employeeLiveNotice').textContent='Novo pedido recebido pelo QR Code na Mesa '+tableNumber+'. Abra a comanda para conferir os itens.';
+    $('employeeLiveNotice').classList.remove('hidden');
+   }
   })
   .subscribe();
 }
