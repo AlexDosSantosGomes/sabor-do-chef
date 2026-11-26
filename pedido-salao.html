@@ -79,9 +79,13 @@ async function initQrMode(){
   $('tableMessage').textContent='Fechamento solicitado · dirija-se ao caixa para pagar.';
   return;
  }
- if(!ctx.has_open_tab){$('tableMessage').textContent='Aguardando abertura da comanda.';$('closedNotice').classList.remove('hidden');return;}
- renderCustomerAccount(ctx);
- $('tableMessage').textContent='Comanda aberta · Escolha seus produtos.';
+ if(ctx.has_open_tab){
+  renderCustomerAccount(ctx);
+  $('tableMessage').textContent='Comanda aberta · Escolha seus produtos.';
+ }else{
+  $('closedNotice').classList.add('hidden');
+  $('tableMessage').textContent='Mesa livre · Escolha seus produtos. A comanda será aberta automaticamente ao enviar o primeiro pedido.';
+ }
  const [pr,cr,ar]=await Promise.all([
   db.from('products').select('id,name,description,price_cents,photo_url,category_id,stock_quantity').eq('active',true).gt('stock_quantity',0).order('name'),
   db.from('categories').select('id,name,sort_order').eq('active',true).order('sort_order'),
