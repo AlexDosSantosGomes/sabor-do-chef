@@ -165,8 +165,11 @@ async function loadSalonOverview(){
     const qrNew=activeOrders.filter(o=>o.order_source==='CLIENT_QR'&&['APROVADO','ENVIADO_IMPRESSAO','FALHA_IMPRESSAO'].includes(o.status)).length;
     const inactive=!t.active;
     const pendingPayment=tab?.status==='PAYMENT_REQUESTED';
-    return '<button type="button" class="salon-table-tile '+(tab?(pendingPayment?'payment-pending':'busy'):inactive?'inactive':'free')+'" data-table="'+t.id+'" '+(inactive&&!tab?'disabled':'')+'><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+(pendingPayment?'AGUARDANDO PAGAMENTO':tab?'EM USO':inactive?'INATIVA':'LIVRE')+'</span>'+
-      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+activeOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>'+(pendingPayment?'<span class="meta">Cliente solicitou fechamento · aguarda caixa</span>':''):inactive?'<span class="meta">Mesa desativada no cadastro</span>':'<span class="meta">Disponível para receber clientes</span>')+
+    const hasOrders=activeOrders.length>0;
+    const tableClass=pendingPayment?'payment-pending':hasOrders?'busy':inactive&&!tab?'inactive':'free';
+    const tableLabel=pendingPayment?'AGUARDANDO PAGAMENTO':hasOrders?'EM USO':inactive&&!tab?'INATIVA':'LIVRE';
+    return '<button type="button" class="salon-table-tile '+tableClass+'" data-table="'+t.id+'" '+(inactive&&!tab?'disabled':'')+'><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+tableLabel+'</span>'+
+      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+activeOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>'+(pendingPayment?'<span class="meta">Cliente solicitou fechamento · aguarda caixa</span>':hasOrders?'':'<span class="meta">Comanda aberta, ainda sem pedidos</span>'):inactive?'<span class="meta">Mesa desativada no cadastro</span>':'<span class="meta">Disponível para receber clientes</span>')+
       '<span class="meta">'+(tab?'Toque para abrir a mesa':inactive?'':'Toque para abrir comanda')+'</span></button>';
   }).join('');
   $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Mesas em ordem numérica · Vermelho: livre · Verde: em uso · Azul: aguardando pagamento</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div>';
