@@ -10,6 +10,7 @@ on:
       - feature/modulo-salao
       - fix/realtime-wakeup-recovery
       - feature/salao-fechamento-apk-otimizacao
+      - reestruturacao-salao-pedidos-individuais
     paths:
       - "app-impressao-android/**"
       - ".github/workflows/build-android-print-apk.yml"
