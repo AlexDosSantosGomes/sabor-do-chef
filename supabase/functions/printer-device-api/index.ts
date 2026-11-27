@@ -238,7 +238,8 @@ Deno.serve(async (req: Request) => {
           db.from("orders")
             .select("total_cents")
             .eq("order_type", "SALAO").eq("payment_status", "PENDENTE").neq("status", "CANCELADO")
-            .gte("created_at", start.toISOString()).lt("created_at", end.toISOString())
+            // Pendências antigas também precisam aparecer no fechamento de hoje.
+            .order("created_at", { ascending: true })
         ]);
         if (ordersResult.error || salonSalesResult.error || salonPaidResult.error || salonPendingResult.error) {
           await db.from("print_jobs").update({ status: "PENDENTE", claimed_at: null, device_id: null, next_attempt_at: new Date(Date.now() + 30000).toISOString(), last_error: "Falha ao consultar as vendas do fechamento diário." }).eq("id", claimed.id);
