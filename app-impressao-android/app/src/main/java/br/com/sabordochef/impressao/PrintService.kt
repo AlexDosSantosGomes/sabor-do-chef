@@ -456,8 +456,11 @@ class PrintService : Service() {
             if (items != null) {
                 for (i in 0 until items.length()) {
                     val item = items.getJSONObject(i)
-                    append(item.optInt("quantity", 1)).append("x ")
-                        .append(item.optString("product_name_snapshot")).append("\n")
+                    val quantity = item.optInt("quantity", 1)
+                    val lineTotal = item.optInt("unit_price_cents", 0) * quantity
+                    append(quantity).append("x ")
+                        .append(item.optString("product_name_snapshot"))
+                        .append(" - ").append(brl(lineTotal)).append("\n")
                     accByItem[item.optString("id")]?.forEach { append("  + ").append(it).append("\n") }
                     val itemNotes = item.optString("notes")
                     if (itemNotes.isNotBlank() && itemNotes != "null") {
