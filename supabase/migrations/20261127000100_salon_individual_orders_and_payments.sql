@@ -292,6 +292,24 @@ end;
 $fn$;
 revoke all on function private.create_salon_individual_order(uuid,text,text,boolean,integer,jsonb,text,uuid,text) from public,anon,authenticated;
 
+create or replace function public.get_salon_qr_table_context(p_qr_token uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $ctx$
+declare v_table_id uuid; v_table_number integer;
+begin
+  select id,table_number into v_table_id,v_table_number
+  from public.restaurant_tables
+  where qr_token=p_qr_token and active=true;
+  if not found then raise exception 'QR Code inválido ou mesa desativada.'; end if;
+  return jsonb_build_object('table_id',v_table_id,'table_number',v_table_number);
+end;
+$ctx$;
+revoke all on function public.get_salon_qr_table_context(uuid) from public;
+grant execute on function public.get_salon_qr_table_context(uuid) to anon,authenticated;
+
 create or replace function public.create_salon_qr_individual_order(
   p_qr_token uuid,p_customer_name text,p_payment_method text,
   p_needs_change boolean,p_change_for_cents integer,p_items jsonb,
