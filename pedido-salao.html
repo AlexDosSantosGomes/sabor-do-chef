@@ -79,7 +79,7 @@ async function loadMenuData(){
  accompaniments.clear();
  (ar.data||[]).forEach(a=>{if(!accompaniments.has(a.product_id))accompaniments.set(a.product_id,[]);accompaniments.get(a.product_id).push(a.name)});
  $('categoryFilter').innerHTML='<option value="">Todas as categorias</option>'+categories.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('');
- $('menuSection').classList.remove('hidden');renderProducts();
+ renderProducts();
 }
 async function initEmployeeMode(){
  if(!employeeTableId){$('tableTitle').textContent='Mesa não informada';$('tableMessage').textContent='Volte ao portal e selecione uma mesa.';return;}
