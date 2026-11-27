@@ -251,7 +251,7 @@ $('sendOrder').addEventListener('click',async()=>{
  const needsChange=payment==='CASH'&&$('needsChange').value==='SIM';
  let changeForCents=null;
  if(needsChange){
-  const raw=$('changeFor').value.trim().replace(/\\./g,'').replace(',','.');
+  const raw=$('changeFor').value.trim().replace(/\./g,'').replace(',','.');
   const amount=Number(raw);
   if(!Number.isFinite(amount)||amount<=0){alert('Informe o valor que será entregue em dinheiro.');return;}
   changeForCents=Math.round(amount*100);
