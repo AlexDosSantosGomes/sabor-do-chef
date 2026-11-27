@@ -22,7 +22,7 @@ function randomToken() {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function requeuePrintJob(db: ReturnType<typeof createClient>, jobId: string, message: string) {
+async function requeuePrintJob(db: any, jobId: string, message: string) {
   const retryAt = new Date(Date.now() + 15000).toISOString();
   const { error } = await db.from("print_jobs").update({
     status: "PENDENTE", claimed_at: null, device_id: null,
@@ -376,6 +376,7 @@ Deno.serve(async (req: Request) => {
         return reply({ error: "Pedido não encontrado" }, 500);
       }
 
+      const orderForPrint = { ...order, table_number: null as number | null };
       if (order.order_type === "SALAO" && order.table_id) {
         const { data: table, error: tableError } = await db.from("restaurant_tables")
           .select("table_number").eq("id", order.table_id).maybeSingle();
@@ -387,7 +388,7 @@ Deno.serve(async (req: Request) => {
           }).eq("id", claimed.id);
           return reply({ error: "Não foi possível identificar a mesa do pedido." }, 500);
         }
-        order.table_number = table.table_number;
+        orderForPrint.table_number = table.table_number;
       }
 
       const { data: items, error: itemsError } = await db.from("order_items")
@@ -418,7 +419,7 @@ Deno.serve(async (req: Request) => {
         }
         accompaniments = data ?? [];
       }
-      return reply({ job: { id: claimed.id, attempt_count: claimed.attempt_count, order, items: items ?? [], accompaniments } });
+      return reply({ job: { id: claimed.id, attempt_count: claimed.attempt_count, order: orderForPrint, items: items ?? [], accompaniments } });
     }
     return reply({ job: null });
   }
