@@ -66,7 +66,8 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 
 .salon-table-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .salon-table-tile{border:0;border-radius:16px;padding:16px;text-align:left;min-height:150px;color:#fff;box-shadow:0 6px 18px #20263818}
-.salon-table-tile.free{background:linear-gradient(145deg,#8f1018,#c51d27)}
+.salon-table-tile.free{background:linear-gradient(145deg,#13783d,#20a45a)}
+.salon-table-tile.available{background:linear-gradient(145deg,#13783d,#20a45a)}
 .salon-table-tile.busy{background:linear-gradient(145deg,#13783d,#20a45a)}
 .salon-table-tile.payment-pending{background:linear-gradient(145deg,#1746a2,#2875df)}
 .salon-table-tile.inactive{background:linear-gradient(145deg,#626875,#858b96);opacity:.82;cursor:not-allowed}
@@ -134,59 +135,41 @@ function showPassword(){ $('loginScreen').classList.add('hidden');$('portalScree
 function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
 function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function loadSalonOverview(){
-  $('roleContent').innerHTML='<p class="muted">Carregando mesas e comandas...</p>';
-  const [tr,tabr]=await Promise.all([
+  $('roleContent').innerHTML='<p class="muted">Carregando mesas e pagamentos pendentes...</p>';
+  const [tr,pr]=await Promise.all([
     supabase.from('restaurant_tables').select('id,table_number,active').order('table_number'),
-    supabase.from('dining_tabs').select('id,table_id,status,opened_at,payment_requested_at').in('status',['OPEN','PAYMENT_REQUESTED'])
+    supabase.from('orders')
+      .select('id,order_number,customer_name,table_id,payment_method,payment_status,total_cents,created_at,customer_notes,restaurant_tables(table_number)')
+      .eq('order_type','SALAO').eq('payment_status','PENDENTE').neq('status','CANCELADO')
+      .order('created_at',{ascending:true}).limit(100)
   ]);
-  if(tr.error)throw tr.error;if(tabr.error)throw tabr.error;
-  const tables=(tr.data||[]).slice().sort((a,b)=>Number(a.table_number)-Number(b.table_number));
-  const tabs=tabr.data||[];
-  const tabIds=tabs.map(t=>t.id);
-  let orders=[];
-  if(tabIds.length){
-    const or=await supabase.from('orders').select('id,order_number,dining_tab_id,total_cents,created_at,status,order_source').in('dining_tab_id',tabIds).order('created_at',{ascending:true});
-    if(or.error)throw or.error;orders=or.data||[];
-  }
-  const openByTable=new Map(tabs.map(t=>[t.table_id,t]));
-  const ordersByTab=new Map();
-  orders.forEach(o=>{if(!ordersByTab.has(o.dining_tab_id))ordersByTab.set(o.dining_tab_id,[]);ordersByTab.get(o.dining_tab_id).push(o)});
+  if(tr.error)throw tr.error;if(pr.error)throw pr.error;
+  const tables=tr.data||[],pending=pr.data||[];
   if(!salonRealtimeChannel){
-    salonRealtimeChannel=supabase.channel('salon-staff-live')
+    salonRealtimeChannel=supabase.channel('salon-individual-orders-live')
       .on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview().catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
-      .on('postgres_changes',{event:'*',schema:'public',table:'dining_tabs'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview().catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
       .subscribe();
   }
   $('roleContent').dataset.salonMode='true';
-  const cards=tables.map(t=>{
-    const tab=openByTable.get(t.id),tabOrders=tab?(ordersByTab.get(tab.id)||[]):[];
-    const activeOrders=tabOrders.filter(o=>o.status!=='CANCELADO');
-    const total=activeOrders.reduce((sum,o)=>sum+Number(o.total_cents||0),0);
-    const qrNew=activeOrders.filter(o=>o.order_source==='CLIENT_QR'&&['APROVADO','ENVIADO_IMPRESSAO','FALHA_IMPRESSAO'].includes(o.status)).length;
-    const inactive=!t.active;
-    const pendingPayment=tab?.status==='PAYMENT_REQUESTED';
-    const hasOrders=activeOrders.length>0;
-    const tableClass=pendingPayment?'payment-pending':hasOrders?'busy':inactive&&!tab?'inactive':'free';
-    const tableLabel=pendingPayment?'AGUARDANDO PAGAMENTO':hasOrders?'EM USO':inactive&&!tab?'INATIVA':'LIVRE';
-    return '<button type="button" class="salon-table-tile '+tableClass+'" data-table="'+t.id+'" '+(inactive&&!tab?'disabled':'')+'><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+tableLabel+'</span>'+
-      (tab?'<span class="meta">Comanda: '+money(total)+'</span><span class="meta">'+activeOrders.length+' pedido(s)'+(qrNew?' · '+qrNew+' novo(s) via QR Code':'')+'</span>'+(pendingPayment?'<span class="meta">Cliente solicitou fechamento · aguarda caixa</span>':hasOrders?'':'<span class="meta">Comanda aberta, ainda sem pedidos</span>'):inactive?'<span class="meta">Mesa desativada no cadastro</span>':'<span class="meta">Disponível para receber clientes</span>')+
-      '<span class="meta">'+(tab?'Toque para abrir a mesa':inactive?'':'Toque para abrir comanda')+'</span></button>';
+  const cards=tables.map(t=>'<button type="button" class="salon-table-tile available" data-table="'+t.id+'" '+(!t.active?'disabled':'')+'><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">DISPONÍVEL</span><span class="meta">'+(t.active?'Toque para registrar um novo pedido':'Mesa desativada no cadastro')+'</span></button>').join('');
+  const paymentLabel=m=>m==='CASH'?'Dinheiro':m==='PIX'?'Pix':m==='CARD'?'Cartão':'Não informado';
+  const rows=pending.map(o=>{
+    const table=Array.isArray(o.restaurant_tables)?o.restaurant_tables[0]:o.restaurant_tables;
+    return '<article class="salon-order-history"><div class="source">PAGAMENTO PENDENTE · MESA '+safe(table?.table_number??'N/I')+'</div><strong>Pedido #'+safe(o.order_number)+' · '+safe(o.customer_name||'Cliente')+'</strong><p class="muted">Total: '+money(o.total_cents)+' · Informado: '+paymentLabel(o.payment_method)+' · '+new Date(o.created_at).toLocaleString('pt-BR')+'</p>'+(o.customer_notes?'<p class="muted">Obs.: '+safe(o.customer_notes)+'</p>':'')+'<label for="paid-method-'+o.id+'">Forma efetivamente recebida</label><select id="paid-method-'+o.id+'" data-paid-method="'+o.id+'"><option value="CASH">Dinheiro</option><option value="PIX">Pix</option><option value="CARD">Cartão</option></select><button type="button" class="primary" data-settle="'+o.id+'">Confirmar pagamento</button></article>';
   }).join('');
-  $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Mesas em ordem numérica · Vermelho: livre · Verde: em uso · Azul: aguardando pagamento</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div>';
+  $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Todas as mesas ficam disponíveis. Cada cliente gera seu próprio pedido.</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div><section class="card" style="margin-top:18px"><h3>Pedidos aguardando pagamento</h3><p class="muted">O método informado no pedido é apenas uma previsão. Confirme aqui a forma realmente recebida no caixa.</p>'+(rows||'<p class="muted">Não há pedidos pendentes de pagamento.</p>')+'</section>';
   $('refreshSalon').addEventListener('click',()=>loadSalonOverview());
-  $('roleContent').querySelectorAll('[data-table]').forEach(btn=>btn.addEventListener('click',async()=>{
-    const table=tables.find(t=>t.id===btn.dataset.table);if(!table)return;
-    let tab=openByTable.get(table.id);
-    if(!tab){
-      if(!table.active){alert('Esta mesa está inativa.');return;}
-      btn.disabled=true;
-      const {error}=await supabase.rpc('open_dining_tab',{p_table_id:table.id});
-      if(error){alert(error.message);btn.disabled=false;return;}
-      const {data:opened,error:openError}=await supabase.from('dining_tabs').select('id').eq('table_id',table.id).eq('status','OPEN').maybeSingle();
-      if(openError||!opened){alert(openError?.message||'Não foi possível localizar a comanda aberta.');await loadSalonOverview();return;}
-      tab=opened;
-    }
-    location.href='./pedido-salao.html?funcionario=1&tab='+encodeURIComponent(tab.id);
+  $('roleContent').querySelectorAll('[data-table]').forEach(btn=>btn.addEventListener('click',()=>{
+    if(btn.disabled)return;
+    location.href='./pedido-salao.html?funcionario=1&mesa_id='+encodeURIComponent(btn.dataset.table);
+  }));
+  $('roleContent').querySelectorAll('[data-settle]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const id=btn.dataset.settle,method=$('paid-method-'+id).value;
+    if(!confirm('Confirma o recebimento deste pedido em '+paymentLabel(method)+'?'))return;
+    btn.disabled=true;btn.textContent='Registrando pagamento...';
+    const {error}=await supabase.rpc('settle_salon_order_payment',{p_order_id:id,p_payment_method:method});
+    if(error){alert(error.message);btn.disabled=false;btn.textContent='Confirmar pagamento';return;}
+    await loadSalonOverview();
   }));
 }
 async function loadDeliveryOrders(){
@@ -224,7 +207,8 @@ async function startSession(user){
     $('roleLabel').textContent='Perfil identificado: '+role;
     $('adminLink').classList.toggle('hidden',role!=='ADMIN');
     if(role==='ADMIN'){
-      $('roleContent').innerHTML='<p>Seu perfil é de administrador. Use os atalhos abaixo para preparar os testes do salão.</p><p><a class="link primary" href="./painel-sabor-do-chef-com-delivery.html">Painel administrativo</a></p><p><a class="link secondary" href="./equipe-salao.html">Gerenciar perfis de funcionários</a></p><p><a class="link secondary" href="./qrs-salao.html">Gerar e imprimir QR Codes das mesas</a></p>';
+      $('roleContent').innerHTML='<p>Seu perfil é de administrador. Use os atalhos abaixo para administrar o sistema.</p><p><a class="link primary" href="./painel-sabor-do-chef-com-delivery.html">Painel administrativo</a></p><p><a class="link secondary" href="./equipe-salao.html">Gerenciar perfis de funcionários</a></p><p><a class="link secondary" href="./qrs-salao.html">Gerar e imprimir QR Codes das mesas</a></p><p><button class="primary" id="adminSalonOps" type="button">Operação do salão e pagamentos</button></p>';
+      $('adminSalonOps').addEventListener('click',()=>loadSalonOverview());
     }else if(role==='SALON'){
       await loadSalonOverview();
     }else if(role==='DELIVERY'){

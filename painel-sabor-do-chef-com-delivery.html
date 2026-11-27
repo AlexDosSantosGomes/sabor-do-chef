@@ -1711,7 +1711,7 @@ async function printDailyCashClose() {
     if (!dateValue) throw new Error('Selecione a data do fechamento.');
     const result = await printerAdminRequest({ action: 'admin_daily_close', report_date: dateValue });
     if (!result?.queued) throw new Error('O fechamento não foi confirmado na fila.');
-    showMessage('cashCloseMessage', 'Fechamento de ' + new Date(dateValue + 'T12:00:00').toLocaleDateString('pt-BR') + ' enviado para a fila da central Android. A impressora emitirá Salão, Delivery e Retirada, com totais por dinheiro, Pix e cartão.', 'success');
+    showMessage('cashCloseMessage', 'Fechamento de ' + new Date(dateValue + 'T12:00:00').toLocaleDateString('pt-BR') + ' enviado para a fila da central Android. A impressão mostrará vendas por modalidade, total recebido por dinheiro, Pix e cartão e pedidos do salão ainda pendentes de pagamento.', 'success');
   } catch (error) {
     showMessage('cashCloseMessage', 'Não foi possível enviar o fechamento para impressão: ' + (error.message || error), 'error');
   } finally {

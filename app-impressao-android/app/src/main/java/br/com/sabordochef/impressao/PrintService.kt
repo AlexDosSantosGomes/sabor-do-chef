@@ -235,8 +235,11 @@ class PrintService : Service() {
             if (items != null) {
                 for (i in 0 until items.length()) {
                     val item = items.getJSONObject(i)
-                    append(item.optInt("quantity", 1)).append("x ")
-                        .append(item.optString("product_name_snapshot")).append("\n")
+                    val quantity = item.optInt("quantity", 1)
+                    val lineTotal = item.optInt("unit_price_cents", 0) * quantity
+                    append(quantity).append("x ")
+                        .append(item.optString("product_name_snapshot"))
+                        .append(" - ").append(brl(lineTotal)).append("\n")
                     accByItem[item.optString("id")]?.forEach { append("  + ").append(it).append("\n") }
                     val notes = item.optString("notes")
                     if (notes.isNotBlank() && notes != "null") append("  Obs.: ").append(notes).append("\n")
@@ -297,6 +300,9 @@ class PrintService : Service() {
             totals.optInt("cash", 0) + totals.optInt("pix", 0) +
                 totals.optInt("card", 0) + totals.optInt("other", 0)
         )
+        val receivedTotal = report.optInt("received_total_cents", total)
+        val pendingSalonTotal = report.optInt("pending_salon_total_cents", 0)
+        val pendingSalonCount = report.optInt("pending_salon_count", 0)
         val ticket = buildString {
             append("SABOR DO CHEF\n")
             append("================================\n")
@@ -308,7 +314,7 @@ class PrintService : Service() {
             append("SALAO: ").append(brl(modalities.optInt("salon", 0))).append("\n")
             append("RETIRADA: ").append(brl(modalities.optInt("pickup", 0))).append("\n")
             append("--------------------------------\n")
-            append("VENDAS POR PAGAMENTO\n")
+            append("RECEBIMENTOS POR PAGAMENTO\n")
             append("PIX: ").append(brl(totals.optInt("pix", 0))).append("\n")
             append("CARTAO: ").append(brl(totals.optInt("card", 0))).append("\n")
             append("DINHEIRO: ").append(brl(totals.optInt("cash", 0))).append("\n")
@@ -316,7 +322,12 @@ class PrintService : Service() {
                 append("OUTROS: ").append(brl(totals.optInt("other", 0))).append("\n")
             }
             append("--------------------------------\n")
-            append("TOTAL GERAL: ").append(brl(total)).append("\n")
+            append("TOTAL DE VENDAS: ").append(brl(total)).append("\n")
+            append("TOTAL RECEBIDO: ").append(brl(receivedTotal)).append("\n")
+            if (pendingSalonCount > 0) {
+                append("SALAO PENDENTE: ").append(brl(pendingSalonTotal))
+                    .append(" (").append(pendingSalonCount).append(" pedido(s))\n")
+            }
             append("================================\n")
             append("SABOR DO CHEF\n\n\n")
         }
@@ -406,9 +417,20 @@ class PrintService : Service() {
             minimumFractionDigits = 2
             maximumFractionDigits = 2
         }
-        val total = "R$ " + amountFormat.format(order.optInt("total_cents", 0) / 100.0)
+        fun brl(cents: Int) = "R$ " + amountFormat.format(cents / 100.0)
+        val totalCents = order.optInt("total_cents", 0)
+        val total = brl(totalCents)
         val number = order.optString("order_number", "N/I")
         val tableNumber = order.optString("table_number", "N/I")
+        val customerName = order.optString("customer_name", "Não informado")
+        val payment = when (order.optString("payment_method").uppercase(Locale.ROOT)) {
+            "DINHEIRO" -> "DINHEIRO"
+            "PIX" -> "PIX"
+            "CARTAO", "CARTÃO" -> "CARTÃO"
+            else -> order.optString("payment_method", "Não informado")
+        }
+        val changeFor = order.optInt("change_for_cents", 0)
+        val hasChange = order.optBoolean("needs_change") && changeFor > totalCents
         val createdAt = order.optString("created_at")
         val createdInstant = try { Instant.parse(createdAt) } catch (_: Exception) { null }
         val localDate = createdInstant?.atZone(ZoneId.of("America/Sao_Paulo"))
@@ -421,15 +443,24 @@ class PrintService : Service() {
             append("PEDIDO DO SALÃO\n")
             append("================================\n")
             append("PEDIDO Nº ").append(number).append("\n")
+            append("CLIENTE: ").append(customerName).append("\n")
             append("DATA/HORA: ").append(dateTime).append("\n")
+            append("PAGAMENTO INFORMADO: ").append(payment).append("\n")
+            if (hasChange) {
+                append("VAI PAGAR COM: ").append(brl(changeFor)).append("\n")
+                append("TROCO A DEVOLVER: ").append(brl(changeFor - totalCents)).append("\n")
+            }
             if (notes.isNotBlank()) append("OBSERVAÇÃO: ").append(notes).append("\n")
             append("--------------------------------\n")
             append("ITENS DO PEDIDO\n")
             if (items != null) {
                 for (i in 0 until items.length()) {
                     val item = items.getJSONObject(i)
-                    append(item.optInt("quantity", 1)).append("x ")
-                        .append(item.optString("product_name_snapshot")).append("\n")
+                    val quantity = item.optInt("quantity", 1)
+                    val lineTotal = item.optInt("unit_price_cents", 0) * quantity
+                    append(quantity).append("x ")
+                        .append(item.optString("product_name_snapshot"))
+                        .append(" - ").append(brl(lineTotal)).append("\n")
                     accByItem[item.optString("id")]?.forEach { append("  + ").append(it).append("\n") }
                     val itemNotes = item.optString("notes")
                     if (itemNotes.isNotBlank() && itemNotes != "null") {
@@ -439,7 +470,7 @@ class PrintService : Service() {
             }
             append("--------------------------------\n")
             append("TOTAL: ").append(total).append("\n")
-            append("PAGAMENTO NA SAÍDA\n")
+            append("PAGAMENTO SERÁ REALIZADO NO CAIXA\n")
             append("--------------------------------\n\n\n")
         }
 
@@ -500,8 +531,11 @@ class PrintService : Service() {
         if (items != null) {
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
-                ticket.append(item.optInt("quantity", 1)).append("x ")
-                    .append(item.optString("product_name_snapshot")).append("\n")
+                val quantity = item.optInt("quantity", 1)
+                val lineTotal = item.optInt("unit_price_cents", 0) * quantity
+                ticket.append(quantity).append("x ")
+                    .append(item.optString("product_name_snapshot"))
+                    .append(" - R$ ").append(amountFormat.format(lineTotal / 100.0)).append("\n")
                 accByItem[item.optString("id")]?.forEach { ticket.append("  + ").append(it).append("\n") }
                 val notes = item.optString("notes")
                 if (notes.isNotBlank() && notes != "null") ticket.append("  Obs: ").append(notes).append("\n")
@@ -526,8 +560,6 @@ class PrintService : Service() {
         val cut = byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
         val out = java.io.ByteArrayOutputStream()
         out.write(PrinterText.initialize())
-        out.write(copy)
-        out.write(cut)
         out.write(copy)
         out.write(cut)
         return out.toByteArray()

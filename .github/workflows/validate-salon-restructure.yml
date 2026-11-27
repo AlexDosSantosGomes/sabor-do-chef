@@ -1,0 +1,53 @@
+name: Validate salon restructure
+
+on:
+  push:
+    branches:
+      - reestruturacao-salao-pedidos-individuais
+    paths:
+      - "pedido-salao.html"
+      - "portal-funcionarios.html"
+      - "supabase/functions/printer-device-api/index.ts"
+      - "supabase/migrations/**"
+      - ".github/workflows/validate-salon-restructure.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check browser scripts
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          for source, target in [
+              ("pedido-salao.html", "/tmp/pedido-salao.mjs"),
+              ("portal-funcionarios.html", "/tmp/portal-funcionarios.mjs"),
+          ]:
+              html = Path(source).read_text(encoding="utf-8")
+              match = re.search(r'<script type="module">(.*?)</script>', html, re.S)
+              if not match:
+                  raise SystemExit(f"Script module não encontrado em {source}")
+              Path(target).write_text(match.group(1), encoding="utf-8")
+          PY
+          node --check /tmp/pedido-salao.mjs
+          node --check /tmp/portal-funcionarios.mjs
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check updated printer API
+        run: deno check supabase/functions/printer-device-api/index.ts
