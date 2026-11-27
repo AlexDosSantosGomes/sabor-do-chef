@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
           await db.from("print_jobs").update({ status: "PENDENTE", claimed_at: null, device_id: null, next_attempt_at: new Date(Date.now() + 60000).toISOString(), last_error: "Data do fechamento inválida." }).eq("id", claimed.id);
           return reply({ error: "Data do fechamento inválida." }, 500);
         }
-        const [ordersResult, tabsResult] = await Promise.all([
+        const [ordersResult, salonSalesResult, salonPaidResult, salonPendingResult] = await Promise.all([
           db.from("orders")
             .select("order_number,order_type,payment_method,total_cents,created_at")
             .eq("status", "ENTREGUE")
@@ -226,16 +226,21 @@ Deno.serve(async (req: Request) => {
             .gte("created_at", start.toISOString())
             .lt("created_at", end.toISOString())
             .order("created_at", { ascending: true }),
-          db.from("dining_tabs")
-            .select("payment_method,paid_total_cents,closed_at,restaurant_tables(table_number)")
-            .eq("status", "CLOSED")
-            .not("paid_total_cents", "is", null)
-            .not("payment_method", "is", null)
-            .gte("closed_at", start.toISOString())
-            .lt("closed_at", end.toISOString())
-            .order("closed_at", { ascending: true })
+          db.from("orders")
+            .select("order_number,table_id,payment_method,payment_status,paid_payment_method,total_cents,created_at,restaurant_tables(table_number)")
+            .eq("order_type", "SALAO").neq("status", "CANCELADO")
+            .gte("created_at", start.toISOString()).lt("created_at", end.toISOString())
+            .order("created_at", { ascending: true }),
+          db.from("orders")
+            .select("order_number,paid_payment_method,total_cents,paid_at,restaurant_tables(table_number)")
+            .eq("order_type", "SALAO").eq("payment_status", "PAGO")
+            .gte("paid_at", start.toISOString()).lt("paid_at", end.toISOString()),
+          db.from("orders")
+            .select("total_cents")
+            .eq("order_type", "SALAO").eq("payment_status", "PENDENTE").neq("status", "CANCELADO")
+            .gte("created_at", start.toISOString()).lt("created_at", end.toISOString())
         ]);
-        if (ordersResult.error || tabsResult.error) {
+        if (ordersResult.error || salonSalesResult.error || salonPaidResult.error || salonPendingResult.error) {
           await db.from("print_jobs").update({ status: "PENDENTE", claimed_at: null, device_id: null, next_attempt_at: new Date(Date.now() + 30000).toISOString(), last_error: "Falha ao consultar as vendas do fechamento diário." }).eq("id", claimed.id);
           return reply({ error: "Não foi possível calcular as vendas do dia." }, 500);
         }
@@ -245,43 +250,64 @@ Deno.serve(async (req: Request) => {
           order_number: sale.order_number,
           total_cents: Number(sale.total_cents ?? 0),
           payment_method: sale.payment_method,
+          payment_status: "PAGO",
           created_at: sale.created_at
         }));
-        const salon = (tabsResult.data ?? []).map((tab: any) => ({
+        const salon = (salonSalesResult.data ?? []).map((sale: any) => ({
           source: "SALAO",
-          table_number: tab.restaurant_tables?.table_number ?? "N/I",
-          total_cents: Number(tab.paid_total_cents ?? 0),
-          payment_method: tab.payment_method,
-          created_at: tab.closed_at
+          order_number: sale.order_number,
+          table_number: sale.restaurant_tables?.table_number ?? "N/I",
+          total_cents: Number(sale.total_cents ?? 0),
+          payment_method: sale.paid_payment_method ?? sale.payment_method,
+          payment_status: sale.payment_status,
+          created_at: sale.created_at
+        }));
+        const salonReceived = (salonPaidResult.data ?? []).map((sale: any) => ({
+          source: "SALAO",
+          order_number: sale.order_number,
+          table_number: sale.restaurant_tables?.table_number ?? "N/I",
+          total_cents: Number(sale.total_cents ?? 0),
+          payment_method: sale.paid_payment_method,
+          payment_status: "PAGO",
+          created_at: sale.paid_at
         }));
         const sales = [...deliveryAndPickup, ...salon].sort(
           (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
-
+        const receivedSales = [...deliveryAndPickup, ...salonReceived];
         const modalityTotals = { delivery: 0, salon: 0, pickup: 0 };
+        const receivedModalityTotals = { delivery: 0, salon: 0, pickup: 0 };
         const paymentTotals = { cash: 0, pix: 0, card: 0, other: 0 };
         const legacyTotals = { cash: 0, pix: 0, card: 0, other: 0 };
         const counts = { cash: 0, pix: 0, card: 0, other: 0 };
         let totalCents = 0;
-
+        let receivedTotalCents = 0;
+        const paymentKeyFor = (method: unknown) => {
+          const value = String(method ?? "").trim().toUpperCase();
+          return ["CASH", "DINHEIRO"].includes(value) ? "cash"
+            : value === "PIX" ? "pix"
+            : ["CARD", "CARTAO", "CARTÃO", "CREDIT_CARD", "DEBIT_CARD", "CARTAO_CREDITO", "CARTAO_DEBITO"].includes(value) ? "card"
+            : "other";
+        };
         for (const sale of sales) {
           const amount = Number(sale.total_cents || 0);
           const modalityKey = sale.source === "SALAO" ? "salon" : sale.source === "RETIRADA" ? "pickup" : "delivery";
           modalityTotals[modalityKey as keyof typeof modalityTotals] += amount;
           totalCents += amount;
-
-          const method = String(sale.payment_method ?? "").trim().toUpperCase();
-          const paymentKey = ["CASH", "DINHEIRO"].includes(method)
-            ? "cash"
-            : method === "PIX"
-              ? "pix"
-              : ["CARD", "CARTAO", "CARTÃO", "CREDIT_CARD", "DEBIT_CARD", "CARTAO_CREDITO", "CARTAO_DEBITO"].includes(method)
-                ? "card"
-                : "other";
+        }
+        for (const sale of receivedSales) {
+          const amount = Number(sale.total_cents || 0);
+          const modalityKey = sale.source === "SALAO" ? "salon" : sale.source === "RETIRADA" ? "pickup" : "delivery";
+          receivedModalityTotals[modalityKey as keyof typeof receivedModalityTotals] += amount;
+          receivedTotalCents += amount;
+          const paymentKey = paymentKeyFor(sale.payment_method);
           paymentTotals[paymentKey as keyof typeof paymentTotals] += amount;
           legacyTotals[paymentKey as keyof typeof legacyTotals] += amount;
           counts[paymentKey as keyof typeof counts] += 1;
         }
+        const pendingSalonTotalCents = (salonPendingResult.data ?? []).reduce(
+          (sum: number, order: any) => sum + Number(order.total_cents ?? 0), 0
+        );
 
         return reply({
           job: {
@@ -295,7 +321,11 @@ Deno.serve(async (req: Request) => {
               counts,
               modality_totals: modalityTotals,
               payment_totals: paymentTotals,
-              total_cents: totalCents
+              received_modality_totals: receivedModalityTotals,
+              total_cents: totalCents,
+              received_total_cents: receivedTotalCents,
+              pending_salon_total_cents: pendingSalonTotalCents,
+              pending_salon_count: (salonPendingResult.data ?? []).length
             }
           }
         });
