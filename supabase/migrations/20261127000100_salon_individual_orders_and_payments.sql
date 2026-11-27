@@ -79,6 +79,44 @@ alter table public.orders add constraint order_destination_check check (
   )
 );
 
+-- Compatibilidade: novos pedidos individuais não possuem dining_tab_id.
+-- Pedidos legados que ainda usam uma comanda continuam sujeitos à validação anterior.
+create or replace function public.ensure_salon_order_tab_is_open()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $guard$
+declare
+  v_status text;
+  v_active boolean;
+begin
+  if new.order_type = 'SALAO'::public.order_type then
+    if new.dining_tab_id is null then
+      select active into v_active
+      from public.restaurant_tables
+      where id = new.table_id
+      for key share;
+      if not found or v_active is not true then
+        raise exception 'Mesa inativa ou inexistente.';
+      end if;
+    else
+      select dt.status, rt.active
+        into v_status, v_active
+        from public.dining_tabs dt
+        join public.restaurant_tables rt on rt.id = dt.table_id
+       where dt.id = new.dining_tab_id
+       for update of dt;
+      if not found or v_status <> 'OPEN' or v_active is not true then
+        raise exception 'Comanda fechada ou mesa inativa. Atualize a tela e tente novamente.';
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$guard$;
+revoke all on function public.ensure_salon_order_tab_is_open() from public, anon, authenticated;
+
 create index if not exists orders_salon_payment_pending_idx
   on public.orders(created_at desc)
   where order_type = 'SALAO'::public.order_type and payment_status = 'PENDENTE';
