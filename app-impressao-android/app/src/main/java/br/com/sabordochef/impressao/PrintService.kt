@@ -500,8 +500,11 @@ class PrintService : Service() {
         if (items != null) {
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
-                ticket.append(item.optInt("quantity", 1)).append("x ")
-                    .append(item.optString("product_name_snapshot")).append("\n")
+                val quantity = item.optInt("quantity", 1)
+                val lineTotal = item.optInt("unit_price_cents", 0) * quantity
+                ticket.append(quantity).append("x ")
+                    .append(item.optString("product_name_snapshot"))
+                    .append(" - R$ ").append(amountFormat.format(lineTotal / 100.0)).append("\n")
                 accByItem[item.optString("id")]?.forEach { ticket.append("  + ").append(it).append("\n") }
                 val notes = item.optString("notes")
                 if (notes.isNotBlank() && notes != "null") ticket.append("  Obs: ").append(notes).append("\n")
@@ -526,8 +529,6 @@ class PrintService : Service() {
         val cut = byteArrayOf(0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00)
         val out = java.io.ByteArrayOutputStream()
         out.write(PrinterText.initialize())
-        out.write(copy)
-        out.write(cut)
         out.write(copy)
         out.write(cut)
         return out.toByteArray()
