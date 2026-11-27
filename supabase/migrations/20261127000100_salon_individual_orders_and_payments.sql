@@ -79,6 +79,63 @@ alter table public.orders add constraint order_destination_check check (
   )
 );
 
+-- Compatibilidade de implantação: RPCs antigas do salão continuam gravando pedidos
+-- pendentes até que o novo front-end esteja publicado.
+create or replace function public.default_salon_order_payment_status()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $default$
+begin
+  if new.order_type = 'SALAO'::public.order_type and new.payment_status is null then
+    new.payment_status := 'PENDENTE';
+  end if;
+  return new;
+end;
+$default$;
+revoke all on function public.default_salon_order_payment_status() from public, anon, authenticated;
+drop trigger if exists orders_default_salon_payment_status on public.orders;
+create trigger orders_default_salon_payment_status
+before insert on public.orders
+for each row execute function public.default_salon_order_payment_status();
+
+-- Se uma tela antiga ainda fechar uma comanda, sincroniza cada pedido individual
+-- para o novo controle financeiro sem somar a comanda duas vezes.
+create or replace function public.sync_legacy_tab_payment_to_orders()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $sync$
+declare v_method text;
+begin
+  if new.status = 'CLOSED' and old.status is distinct from new.status then
+    v_method := case upper(coalesce(new.payment_method,''))
+      when 'DINHEIRO' then 'CASH'
+      when 'PIX' then 'PIX'
+      when 'CARTAO' then 'CARD'
+      else null end;
+    if v_method is not null and new.closed_at is not null then
+      update public.orders
+         set payment_status = 'PAGO',
+             paid_payment_method = v_method,
+             paid_at = new.closed_at,
+             paid_by = new.closed_by
+       where dining_tab_id = new.id
+         and order_type = 'SALAO'::public.order_type
+         and payment_status = 'PENDENTE'
+         and status <> 'CANCELADO'::public.order_status;
+    end if;
+  end if;
+  return new;
+end;
+$sync$;
+revoke all on function public.sync_legacy_tab_payment_to_orders() from public, anon, authenticated;
+drop trigger if exists dining_tabs_sync_legacy_order_payment on public.dining_tabs;
+create trigger dining_tabs_sync_legacy_order_payment
+after update of status on public.dining_tabs
+for each row execute function public.sync_legacy_tab_payment_to_orders();
+
 -- Compatibilidade: novos pedidos individuais não possuem dining_tab_id.
 -- Pedidos legados que ainda usam uma comanda continuam sujeitos à validação anterior.
 create or replace function public.ensure_salon_order_tab_is_open()
