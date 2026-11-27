@@ -49,5 +49,5 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Type-check printer API
+      - name: Type-check updated printer API
         run: deno check supabase/functions/printer-device-api/index.ts
