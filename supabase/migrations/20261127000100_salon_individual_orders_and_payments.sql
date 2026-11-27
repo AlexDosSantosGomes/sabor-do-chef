@@ -33,15 +33,26 @@ alter table public.orders add constraint orders_paid_fields_check
 
 -- Migra o estado financeiro das comandas antigas sem apagar seu histórico.
 update public.orders o
-set payment_status = case when dt.status = 'CLOSED' then 'PAGO' else 'PENDENTE' end,
+set payment_status = case
+      when dt.status = 'CLOSED'
+       and dt.closed_at is not null
+       and upper(coalesce(dt.payment_method,'')) in ('DINHEIRO','CASH','PIX','CARTAO','CARD')
+      then 'PAGO' else 'PENDENTE' end,
     paid_payment_method = case
-      when dt.status = 'CLOSED' then case upper(coalesce(dt.payment_method,'')) 
-        when 'DINHEIRO' then 'CASH' when 'CASH' then 'CASH'
-        when 'PIX' then 'PIX' when 'CARTAO' then 'CARD' when 'CARD' then 'CARD'
-        else null end
+      when dt.status = 'CLOSED' and dt.closed_at is not null then
+        case upper(coalesce(dt.payment_method,''))
+          when 'DINHEIRO' then 'CASH' when 'CASH' then 'CASH'
+          when 'PIX' then 'PIX' when 'CARTAO' then 'CARD' when 'CARD' then 'CARD'
+          else null end
       else null end,
-    paid_at = case when dt.status = 'CLOSED' then dt.closed_at else null end,
-    paid_by = case when dt.status = 'CLOSED' then dt.closed_by else null end
+    paid_at = case
+      when dt.status = 'CLOSED' and dt.closed_at is not null
+       and upper(coalesce(dt.payment_method,'')) in ('DINHEIRO','CASH','PIX','CARTAO','CARD')
+      then dt.closed_at else null end,
+    paid_by = case
+      when dt.status = 'CLOSED' and dt.closed_at is not null
+       and upper(coalesce(dt.payment_method,'')) in ('DINHEIRO','CASH','PIX','CARTAO','CARD')
+      then dt.closed_by else null end
 from public.dining_tabs dt
 where o.order_type = 'SALAO'::public.order_type
   and o.dining_tab_id = dt.id
