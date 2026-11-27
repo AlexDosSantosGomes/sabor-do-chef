@@ -300,6 +300,9 @@ class PrintService : Service() {
             totals.optInt("cash", 0) + totals.optInt("pix", 0) +
                 totals.optInt("card", 0) + totals.optInt("other", 0)
         )
+        val receivedTotal = report.optInt("received_total_cents", total)
+        val pendingSalonTotal = report.optInt("pending_salon_total_cents", 0)
+        val pendingSalonCount = report.optInt("pending_salon_count", 0)
         val ticket = buildString {
             append("SABOR DO CHEF\n")
             append("================================\n")
@@ -311,7 +314,7 @@ class PrintService : Service() {
             append("SALAO: ").append(brl(modalities.optInt("salon", 0))).append("\n")
             append("RETIRADA: ").append(brl(modalities.optInt("pickup", 0))).append("\n")
             append("--------------------------------\n")
-            append("VENDAS POR PAGAMENTO\n")
+            append("RECEBIMENTOS POR PAGAMENTO\n")
             append("PIX: ").append(brl(totals.optInt("pix", 0))).append("\n")
             append("CARTAO: ").append(brl(totals.optInt("card", 0))).append("\n")
             append("DINHEIRO: ").append(brl(totals.optInt("cash", 0))).append("\n")
@@ -319,7 +322,12 @@ class PrintService : Service() {
                 append("OUTROS: ").append(brl(totals.optInt("other", 0))).append("\n")
             }
             append("--------------------------------\n")
-            append("TOTAL GERAL: ").append(brl(total)).append("\n")
+            append("TOTAL DE VENDAS: ").append(brl(total)).append("\n")
+            append("TOTAL RECEBIDO: ").append(brl(receivedTotal)).append("\n")
+            if (pendingSalonCount > 0) {
+                append("SALAO PENDENTE: ").append(brl(pendingSalonTotal))
+                    .append(" (").append(pendingSalonCount).append(" pedido(s))\n")
+            }
             append("================================\n")
             append("SABOR DO CHEF\n\n\n")
         }
