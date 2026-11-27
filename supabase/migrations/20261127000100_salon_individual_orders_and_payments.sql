@@ -15,7 +15,7 @@ create unique index if not exists orders_client_request_id_uidx
 alter table public.orders drop constraint if exists orders_payment_status_check;
 alter table public.orders add constraint orders_payment_status_check
   check (
-    (order_type = 'SALAO'::public.order_type and payment_status in ('PENDENTE','PAGO'))
+    (order_type = 'SALAO'::public.order_type and payment_status is not null and payment_status in ('PENDENTE','PAGO'))
     or (order_type <> 'SALAO'::public.order_type and payment_status is null)
   );
 
