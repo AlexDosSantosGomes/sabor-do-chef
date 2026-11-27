@@ -17,7 +17,7 @@ alter table public.orders add constraint orders_payment_status_check
   check (
     (order_type = 'SALAO'::public.order_type and payment_status is not null and payment_status in ('PENDENTE','PAGO'))
     or (order_type <> 'SALAO'::public.order_type and payment_status is null)
-  );
+  ) not valid;
 
 alter table public.orders drop constraint if exists orders_paid_payment_method_check;
 alter table public.orders add constraint orders_paid_payment_method_check
@@ -57,6 +57,8 @@ from public.dining_tabs dt
 where o.order_type = 'SALAO'::public.order_type
   and o.dining_tab_id = dt.id
   and o.payment_status is null;
+
+alter table public.orders validate constraint orders_payment_status_check;
 
 -- Permite nome obrigatório nos novos pedidos do salão e preserva pedidos antigos
 -- vinculados a comandas históricas que ainda não tinham nome individual.
