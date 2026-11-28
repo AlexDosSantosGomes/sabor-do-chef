@@ -864,7 +864,9 @@ $('productList').addEventListener('click', async (event) => {
       return;
     }
 
-    await loadProducts();
+    // Atualiza somente o produto alterado para preservar a posição da página.
+    product.active = !product.active;
+    renderProducts();
   }
 });
 
