@@ -274,10 +274,8 @@ async function startSession(user){
     $('roleLabel').textContent='Perfil identificado: '+role;
     $('adminLink').classList.toggle('hidden',role!=='ADMIN');
     if(role==='ADMIN'){
-      $('roleLabel').textContent='Perfil de administrador confirmado. Abrindo o painel...';
-      $('roleContent').innerHTML='<p class="muted">Acesso autorizado. Redirecionando para o painel administrativo...</p>';
-      location.replace('./painel-sabor-do-chef-com-delivery.html');
-      return;
+      $('roleLabel').textContent='Administrador: acesso liberado ao salão e ao painel administrativo.';
+      await loadSalonOverview();
     }else if(role==='SALON'){
       await loadSalonOverview();
     }else if(role==='DELIVERY'){
