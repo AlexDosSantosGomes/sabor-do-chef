@@ -85,6 +85,12 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 .salon-order-history{border:1px solid var(--border);border-radius:12px;padding:12px;margin:10px 0;background:#fff}
 .salon-order-history .source{font-size:11px;font-weight:850;color:var(--red)}
 .salon-table-status{font-weight:900}
+.pending-jump{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin:16px 0;padding:15px 17px;text-align:left;background:var(--red);color:#fff;border-radius:13px}
+.pending-jump strong{font-size:14px}.pending-count{background:#fff;color:var(--red);border-radius:999px;min-width:30px;padding:4px 9px;text-align:center;font-weight:950}
+.payment-confirm-overlay{position:fixed;inset:0;z-index:50;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px}
+.payment-confirm-card{background:#fff;width:min(100%,460px);max-height:88vh;overflow:auto;border-radius:17px;padding:20px;box-shadow:0 16px 48px #0003}
+.payment-confirm-note{white-space:pre-wrap;background:#f5f6f8;border:1px solid var(--border);border-radius:10px;padding:12px;margin:8px 0 14px;min-height:42px}
+.payment-confirm-actions{display:flex;gap:9px;margin-top:16px}.payment-confirm-actions button{flex:1}
 @media(max-width:420px){.salon-table-tile{min-height:132px;padding:12px}.salon-table-tile .big{font-size:32px}}
 
 </style>
@@ -123,19 +129,41 @@ button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;
 </div>
 </section>
 </main>
+<div id="paymentConfirmModal" class="payment-confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="paymentConfirmTitle">
+  <div class="payment-confirm-card">
+    <h2 id="paymentConfirmTitle">Confirmar pagamento</h2>
+    <p id="paymentConfirmOrder" class="muted"></p>
+    <strong>Observação escrita pelo cliente</strong>
+    <div id="paymentConfirmNote" class="payment-confirm-note"></div>
+    <label for="paymentConfirmMethod">Forma realmente recebida no caixa</label>
+    <select id="paymentConfirmMethod">
+      <option value="CASH">Dinheiro</option>
+      <option value="PIX">Pix</option>
+      <option value="CARD">Cartão</option>
+    </select>
+    <p class="muted">A forma informada pelo cliente já vem selecionada. Altere somente se recebeu de outra maneira.</p>
+    <div class="payment-confirm-actions">
+      <button type="button" class="secondary" id="cancelPaymentConfirm">Voltar</button>
+      <button type="button" class="primary" id="confirmPaymentReceived">Confirmar recebimento</button>
+    </div>
+  </div>
+</div>
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
 const $=id=>document.getElementById(id);
 const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 let salonRealtimeChannel=null;
+let paymentOrderBeingConfirmed=null;
+function closePaymentConfirm(){ $('paymentConfirmModal').classList.add('hidden'); paymentOrderBeingConfirmed=null; }
 function message(id,text,type=''){const el=$(id);el.textContent=text;el.className='message '+type}
 function showLogin(){ $('loginScreen').classList.remove('hidden');$('passwordScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
 function showPassword(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('passwordScreen').classList.remove('hidden');$('logoutBtn').classList.add('hidden'); }
 function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
 function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function loadSalonOverview(){
-  $('roleContent').innerHTML='<p class="muted">Carregando mesas e pagamentos pendentes...</p>';
+  const previousScrollY=window.scrollY;
+  if(!$('roleContent').innerHTML.trim()) $('roleContent').innerHTML='<p class="muted">Carregando mesas e pagamentos pendentes...</p>';
   const [tr,pr]=await Promise.all([
     supabase.from('restaurant_tables').select('id,table_number,active').order('table_number'),
     supabase.from('orders')
@@ -155,22 +183,28 @@ async function loadSalonOverview(){
   const paymentLabel=m=>m==='CASH'?'Dinheiro':m==='PIX'?'Pix':m==='CARD'?'Cartão':'Não informado';
   const rows=pending.map(o=>{
     const table=Array.isArray(o.restaurant_tables)?o.restaurant_tables[0]:o.restaurant_tables;
-    return '<article class="salon-order-history"><div class="source">PAGAMENTO PENDENTE · MESA '+safe(table?.table_number??'N/I')+'</div><strong>Pedido #'+safe(o.order_number)+' · '+safe(o.customer_name||'Cliente')+'</strong><p class="muted">Total: '+money(o.total_cents)+' · Informado: '+paymentLabel(o.payment_method)+' · '+new Date(o.created_at).toLocaleString('pt-BR')+'</p>'+(o.customer_notes?'<p class="muted">Obs.: '+safe(o.customer_notes)+'</p>':'')+'<label for="paid-method-'+o.id+'">Forma efetivamente recebida</label><select id="paid-method-'+o.id+'" data-paid-method="'+o.id+'"><option value="CASH">Dinheiro</option><option value="PIX">Pix</option><option value="CARD">Cartão</option></select><button type="button" class="primary" data-settle="'+o.id+'">Confirmar pagamento</button></article>';
+    return '<article class="salon-order-history"><div class="source">PAGAMENTO PENDENTE · MESA '+safe(table?.table_number??'N/I')+'</div><strong>Pedido #'+safe(o.order_number)+' · '+safe(o.customer_name||'Cliente')+'</strong><p class="muted">Total: '+money(o.total_cents)+' · Informado: '+paymentLabel(o.payment_method)+' · '+new Date(o.created_at).toLocaleString('pt-BR')+'</p>'+(o.customer_notes?'<p class="muted"><strong>Observação do cliente:</strong> '+safe(o.customer_notes)+'</p>':'<p class="muted">O cliente não deixou observação.</p>')+'<button type="button" class="primary" data-settle="'+o.id+'">Confirmar pagamento</button></article>';
   }).join('');
-  $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Todas as mesas ficam disponíveis. Cada cliente gera seu próprio pedido.</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div><section class="card" style="margin-top:18px"><h3>Pedidos aguardando pagamento</h3><p class="muted">O método informado no pedido é apenas uma previsão. Confirme aqui a forma realmente recebida no caixa.</p>'+(rows||'<p class="muted">Não há pedidos pendentes de pagamento.</p>')+'</section>';
+  $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Todas as mesas ficam disponíveis. Cada cliente gera seu próprio pedido.</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><button type="button" class="pending-jump" id="goPendingPayments"><strong> PEDIDOS AGUARDANDO PAGAMENTO </strong><span class="pending-count">'+pending.length+'</span></button><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div><section id="salonPendingPayments" class="card" style="margin-top:18px"><h3>Pedidos aguardando pagamento</h3><p class="muted">O método informado no pedido é apenas uma previsão. Confirme aqui a forma realmente recebida no caixa.</p>'+(rows||'<p class="muted">Não há pedidos pendentes de pagamento.</p>')+'</section>';
   $('refreshSalon').addEventListener('click',()=>loadSalonOverview());
+  $('goPendingPayments').addEventListener('click',()=>{
+    $('salonPendingPayments').scrollIntoView({behavior:'smooth',block:'start'});
+  });
   $('roleContent').querySelectorAll('[data-table]').forEach(btn=>btn.addEventListener('click',()=>{
     if(btn.disabled)return;
     location.href='./pedido-salao.html?funcionario=1&mesa_id='+encodeURIComponent(btn.dataset.table);
   }));
-  $('roleContent').querySelectorAll('[data-settle]').forEach(btn=>btn.addEventListener('click',async()=>{
-    const id=btn.dataset.settle,method=$('paid-method-'+id).value;
-    if(!confirm('Confirma o recebimento deste pedido em '+paymentLabel(method)+'?'))return;
-    btn.disabled=true;btn.textContent='Registrando pagamento...';
-    const {error}=await supabase.rpc('settle_salon_order_payment',{p_order_id:id,p_payment_method:method});
-    if(error){alert(error.message);btn.disabled=false;btn.textContent='Confirmar pagamento';return;}
-    await loadSalonOverview();
+  $('roleContent').querySelectorAll('[data-settle]').forEach(btn=>btn.addEventListener('click',()=>{
+    const order=pending.find(item=>item.id===btn.dataset.settle);
+    if(!order)return;
+    paymentOrderBeingConfirmed=order;
+    const informed=['CASH','PIX','CARD'].includes(order.payment_method)?order.payment_method:'CASH';
+    $('paymentConfirmOrder').textContent='Pedido #'+order.order_number+' · '+(order.customer_name||'Cliente')+' · '+money(order.total_cents)+' · Forma informada: '+paymentLabel(order.payment_method);
+    $('paymentConfirmNote').textContent=order.customer_notes?.trim()||'O cliente não deixou observação.';
+    $('paymentConfirmMethod').value=informed;
+    $('paymentConfirmModal').classList.remove('hidden');
   }));
+  requestAnimationFrame(()=>window.scrollTo({top:previousScrollY,behavior:'instant'}));
 }
 async function loadDeliveryOrders(){
   const {data:orders,error}=await supabase.from('orders')
