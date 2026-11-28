@@ -998,15 +998,14 @@ async function renderAccompaniments() {
 
   list.innerHTML = options.map(group => {
     const allActive = group.rows.every(item => item.active === true);
-    const allInactive = group.rows.every(item => item.active !== true);
-    const status = allActive ? 'Ativo' : (allInactive ? 'Inativo' : 'Parcialmente ativo');
+    const status = allActive ? 'Ativo' : (group.rows.every(item => item.active !== true) ? 'Inativo' : 'Parcialmente ativo');
     const productCount = new Set(group.rows.map(item => item.product_id)).size;
     const ids = group.rows.map(item => item.id);
     return `
       <article class="product">
         <div class="product-info">
           <strong>${escapeHTML(group.name)}</strong>
-          <span class="status ${allActive ? '' : 'off'}">${status}</span>
+          <span class="status ${allActive ? '' : 'off'}" data-accomp-status>${status}</span>
           <small class="muted">Cadastrado em ${productCount} prato(s)</small>
         </div>
         <div class="product-actions">
@@ -1014,78 +1013,91 @@ async function renderAccompaniments() {
             data-accomp-ids="${ids.join(',')}" data-accomp-next="${allActive ? 'false' : 'true'}">
             ${allActive ? 'Desativar' : 'Ativar'}
           </button>
+          <button class="secondary" type="button" data-accomp-add-all="${escapeHTML(group.name)}">
+            Cadastrar em todos os pratos
+          </button>
         </div>
       </article>`;
   }).join('');
+}
+
+async function addAccompanimentToAllQuentinhas(name) {
+  const quentinhaProducts = products.filter(product =>
+    product.categories?.name?.trim().toLowerCase() === 'quentinha');
+  if (!quentinhaProducts.length) throw new Error('Não encontrei produtos na categoria Quentinha.');
+
+  const { data: existing, error: readError } = await supabase
+    .from('product_accompaniments')
+    .select('product_id, name, sort_order')
+    .in('product_id', quentinhaProducts.map(product => product.id));
+  if (readError) throw readError;
+
+  const normalizedName = name.trim().toLocaleLowerCase('pt-BR');
+  const matching = (existing || []).filter(item =>
+    item.name?.trim().toLocaleLowerCase('pt-BR') === normalizedName);
+  const alreadyPresent = new Set(matching.map(item => item.product_id));
+  const rows = quentinhaProducts
+    .filter(product => !alreadyPresent.has(product.id))
+    .map(product => {
+      const productRows = (existing || []).filter(item => item.product_id === product.id);
+      return {
+        product_id: product.id,
+        name: name.trim(),
+        active: true,
+        sort_order: Math.max(0, ...productRows.map(item => Number(item.sort_order) || 0)) + 1
+      };
+    });
+
+  if (!rows.length) return { added: 0, total: quentinhaProducts.length };
+  const { error } = await supabase.from('product_accompaniments').insert(rows);
+  if (error) throw error;
+  return { added: rows.length, total: quentinhaProducts.length };
 }
 
 $('accompForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const name = $('accompName').value.trim();
   if (!name) return;
-
-  const quentinhaProducts = products.filter(product =>
-    product.categories?.name?.trim().toLowerCase() === 'quentinha');
-  if (!quentinhaProducts.length) {
-    showMessage('accompMessage', 'Não encontrei produtos na categoria Quentinha.', 'error');
-    return;
-  }
-
-  const { data: existing, error: readError } = await supabase
-    .from('product_accompaniments')
-    .select('id, product_id, name, sort_order')
-    .in('product_id', quentinhaProducts.map(product => product.id));
-  if (readError) {
-    showMessage('accompMessage', 'Erro ao verificar opções: ' + readError.message, 'error');
-    return;
-  }
-
-  const matching = (existing || []).filter(item =>
-    item.name?.trim().toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'));
-  const alreadyEverywhere = quentinhaProducts.every(product =>
-    matching.some(item => item.product_id === product.id));
-  if (alreadyEverywhere) {
-    showMessage('accompMessage', 'Esse acompanhamento já está cadastrado em todas as quentinhas.', 'error');
-    return;
-  }
-
-  const rows = quentinhaProducts
-    .filter(product => !matching.some(item => item.product_id === product.id))
-    .map(product => {
-      const productRows = (existing || []).filter(item => item.product_id === product.id);
-      return {
-        product_id: product.id,
-        name,
-        active: true,
-        sort_order: Math.max(0, ...productRows.map(item => Number(item.sort_order) || 0)) + 1
-      };
-    });
-
-  if (matching.length) {
-    const { error: activateError } = await supabase
-      .from('product_accompaniments')
-      .update({ active: true })
-      .in('id', matching.map(item => item.id));
-    if (activateError) {
-      showMessage('accompMessage', 'Erro ao ativar opções existentes: ' + activateError.message, 'error');
+  try {
+    const result = await addAccompanimentToAllQuentinhas(name);
+    if (!result.added) {
+      showMessage('accompMessage', 'Esse acompanhamento já está cadastrado em todas as quentinhas.', 'error');
       return;
     }
+    $('accompName').value = '';
+    showMessage('accompMessage',
+      'Acompanhamento adicionado em ' + result.added + ' quentinha(s)!',
+      'success');
+    await renderAccompaniments();
+  } catch (error) {
+    showMessage('accompMessage', 'Não foi possível cadastrar: ' + (error.message || error), 'error');
   }
-
-  const { error } = await supabase.from('product_accompaniments').insert(rows);
-  if (error) {
-    showMessage('accompMessage', 'Erro ao salvar: ' + error.message, 'error');
-    return;
-  }
-
-  $('accompName').value = '';
-  showMessage('accompMessage',
-    'Acompanhamento adicionado e ativado em ' + quentinhaProducts.length + ' quentinha(s)!',
-    'success');
-  await renderAccompaniments();
 });
 
 $('accompList').addEventListener('click', async (event) => {
+  const addAllButton = event.target.closest('[data-accomp-add-all]');
+  if (addAllButton) {
+    const name = addAllButton.dataset.accompAddAll;
+    addAllButton.disabled = true;
+    try {
+      const result = await addAccompanimentToAllQuentinhas(name);
+      showMessage('accompMessage',
+        result.added
+          ? '“' + name + '” cadastrado em mais ' + result.added + ' quentinha(s).'
+          : '“' + name + '” já está cadastrado em todas as quentinhas.',
+        'success');
+      if (result.added) {
+        const scrollPosition = window.scrollY;
+        await renderAccompaniments();
+        window.scrollTo({ top: scrollPosition, behavior: 'instant' });
+      }
+    } catch (error) {
+      showMessage('accompMessage', 'Erro ao cadastrar em todos os pratos: ' + (error.message || error), 'error');
+      addAllButton.disabled = false;
+    }
+    return;
+  }
+
   const button = event.target.closest('[data-accomp-ids]');
   if (!button) return;
   const ids = button.dataset.accompIds.split(',').filter(Boolean);
@@ -1102,12 +1114,20 @@ $('accompList').addEventListener('click', async (event) => {
     return;
   }
 
+  button.dataset.accompNext = String(!nextActive);
+  button.textContent = nextActive ? 'Desativar' : 'Ativar';
+  button.className = nextActive ? 'danger' : 'secondary';
+  const status = button.closest('.product')?.querySelector('[data-accomp-status]');
+  if (status) {
+    status.textContent = nextActive ? 'Ativo' : 'Inativo';
+    status.classList.toggle('off', !nextActive);
+  }
+  button.disabled = false;
   showMessage('accompMessage',
     nextActive
-      ? 'Acompanhamento ativado em todos os pratos que usam essa opção.'
-      : 'Acompanhamento desativado em todos os pratos que usam essa opção.',
+      ? 'Acompanhamento ativado nos pratos cadastrados.'
+      : 'Acompanhamento desativado nos pratos cadastrados.',
     'success');
-  await renderAccompaniments();
 });
 
 async function loadDeliveryOrders() {
