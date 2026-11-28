@@ -247,6 +247,18 @@ button:active{transform:translateY(1px)}
 .message{font-weight:600}
 @media(max-width:760px){header{padding:15px 17px}main{width:calc(100% - 24px);margin:15px auto 34px}#appScreen{grid-template-columns:1fr;gap:13px}#appScreen>.panel{grid-column:auto!important;padding:17px;border-radius:15px}.login{margin:38px auto;padding:22px}.product{border-radius:12px}}
 @media(min-width:761px) and (max-width:980px){#appScreen{grid-template-columns:1fr 1fr}#appScreen>.panel:nth-child(4),#appScreen>.panel:nth-child(5){grid-column:1/-1}}
+
+#editDeliveryModal{position:fixed;inset:0;z-index:1000;background:#15192399;display:none;align-items:flex-start;justify-content:center;padding:18px;overflow:auto}
+#editDeliveryModal.open{display:flex}
+#editDeliveryModal .edit-dialog{width:min(760px,100%);margin:auto;background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 70px #0003}
+.edit-item-row{border:1px solid #e7e9ee;border-radius:12px;padding:13px;margin:12px 0;background:#fff}
+.edit-item-top{display:grid;grid-template-columns:minmax(0,1fr) 95px auto;gap:9px;align-items:end}
+.edit-unit-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.edit-unit{background:#f7f7f9;border-radius:9px;padding:9px}
+.edit-unit strong{font-size:12px;display:block;margin-bottom:5px}
+.edit-modal-actions{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px}
+@media(max-width:560px){#editDeliveryModal{padding:8px}.edit-dialog{padding:15px!important}.edit-item-top{grid-template-columns:1fr 80px}.edit-item-top button{grid-column:1/-1}}
+
 </style>
 </head>
 
@@ -485,6 +497,30 @@ button:active{transform:translateY(1px)}
     </div>
     <p class="muted" style="margin-top:14px">O faturamento considera somente pedidos com status Entregue. O período usa a data de criação do pedido, pois o banco ainda não possui um campo específico para a data da entrega.</p>
   </section>
+
+
+<div id="editDeliveryModal" aria-hidden="true">
+  <section class="edit-dialog" role="dialog" aria-modal="true" aria-labelledby="editDeliveryTitle">
+    <div class="order-head"><h2 id="editDeliveryTitle">Editar pedido</h2><button type="button" class="secondary" id="closeEditDelivery">Fechar</button></div>
+    <p class="muted">As alterações só podem ser salvas enquanto o pedido aguarda aprovação.</p>
+    <div class="form-grid">
+      <div><label for="editDeliveryName">Nome do cliente</label><input id="editDeliveryName" maxlength="100"></div>
+      <div><label for="editDeliveryPhone">Telefone</label><input id="editDeliveryPhone" inputmode="tel" maxlength="20"></div>
+      <div id="editDeliveryAddressWrap" style="grid-column:1/-1"><label for="editDeliveryAddress">Endereço</label><input id="editDeliveryAddress" maxlength="300"></div>
+    </div>
+    <label for="editDeliveryNotes">Observação do pedido</label><textarea id="editDeliveryNotes" rows="2" maxlength="300"></textarea>
+    <div class="order-head" style="margin-top:18px"><h3 style="margin:0">Produtos</h3><button type="button" class="secondary" id="addEditDeliveryItem">+ Adicionar produto</button></div>
+    <div id="editDeliveryItems"></div>
+    <div class="form-grid">
+      <div><label for="editDeliveryPayment">Forma de pagamento</label><select id="editDeliveryPayment"><option value="CASH">Dinheiro</option><option value="PIX">Pix</option><option value="CARD">Cartão</option></select></div>
+      <div class="checkline"><input id="editDeliveryNeedsChange" type="checkbox"><label for="editDeliveryNeedsChange">Precisa de troco</label></div>
+      <div id="editDeliveryChangeWrap" class="hidden"><label for="editDeliveryChange">Cliente paga com (R$)</label><input id="editDeliveryChange" type="number" min="0.01" step="0.01"></div>
+    </div>
+    <div id="editDeliveryTotal" class="order-total">Total estimado: R$ 0,00</div>
+    <div id="editDeliveryMessage" class="message" aria-live="polite"></div>
+    <div class="edit-modal-actions"><button type="button" class="secondary" id="cancelEditDelivery">Cancelar</button><button type="button" class="primary" id="saveEditDelivery">Salvar alterações</button></div>
+  </section>
+</div>
 
 </main>
 
@@ -1130,13 +1166,158 @@ $('accompList').addEventListener('click', async (event) => {
     'success');
 });
 
+
+let editingDeliveryOrderId = null;
+let editAccompanimentsByProduct = new Map();
+
+function editDeliveryMoney(cents) {
+  return (Number(cents || 0) / 100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+}
+function closeEditDeliveryModal() {
+  $('editDeliveryModal').classList.remove('open');
+  $('editDeliveryModal').setAttribute('aria-hidden','true');
+  editingDeliveryOrderId = null;
+}
+function renderEditDeliveryItemRow(item = {}) {
+  const productsList = (products || []);
+  const options = productsList.map(p => '<option value="'+p.id+'" '+(p.id===item.product_id?'selected':'')+'>'+escapeHTML(p.name)+' · '+editDeliveryMoney(p.price_cents)+'</option>').join('');
+  const row = document.createElement('div');
+  row.className='edit-item-row';
+  row.innerHTML='<div class="edit-item-top"><div><label>Produto</label><select data-edit-product><option value="">Selecione um prato</option>'+options+'</select></div><div><label>Quantidade</label><input data-edit-quantity type="number" min="1" max="20" step="1" value="'+Math.max(1,Number(item.quantity)||1)+'"></div><button type="button" class="danger" data-edit-remove>Remover</button></div><div data-edit-units></div>';
+  const productSelect=row.querySelector('[data-edit-product]');
+  const quantityInput=row.querySelector('[data-edit-quantity]');
+  const renderUnits=()=>{
+    const productId=productSelect.value;
+    const quantity=Math.max(1,Math.min(20,Number(quantityInput.value)||1));
+    const available=editAccompanimentsByProduct.get(productId)||[];
+    const prior=item._selectedSides||[];
+    const units=row.querySelector('[data-edit-units]');
+    if(!available.length){units.innerHTML='';return;}
+    units.innerHTML=Array.from({length:quantity},(_,index)=>{
+      const selected=prior[index]||[];
+      const sideOptions='<option value="">Sem acompanhamento</option>'+available.map(a=>'<option value="'+escapeHTML(a.name)+'">'+escapeHTML(a.name)+'</option>').join('');
+      return '<div class="edit-unit"><strong>Quentinha '+(index+1)+' · até 2 acompanhamentos</strong><div class="edit-unit-sides"><select data-edit-side="'+index+'-0">'+sideOptions+'</select><select data-edit-side="'+index+'-1">'+sideOptions+'</select></div></div>';
+    }).join('');
+    units.querySelectorAll('[data-edit-side]').forEach(sel=>{
+      const [unit,slot]=sel.dataset.editSide.split('-').map(Number);
+      if(prior[unit]?.[slot]) sel.value=prior[unit][slot];
+    });
+  };
+  productSelect.addEventListener('change',()=>{item._selectedSides=[];renderUnits();updateEditDeliveryTotal();});
+  quantityInput.addEventListener('input',()=>{renderUnits();updateEditDeliveryTotal();});
+  row.querySelector('[data-edit-remove]').addEventListener('click',()=>{row.remove();updateEditDeliveryTotal();});
+  row._renderUnits=renderUnits;
+  row._initialItem=item;
+  renderUnits();
+  $('editDeliveryItems').appendChild(row);
+  return row;
+}
+function updateEditDeliveryTotal(){
+  let total=0;
+  $('editDeliveryItems').querySelectorAll('.edit-item-row').forEach(row=>{
+    const product=products.find(p=>p.id===row.querySelector('[data-edit-product]').value);
+    const qty=Math.max(0,Number(row.querySelector('[data-edit-quantity]').value)||0);
+    if(product) total+=Number(product.price_cents||0)*qty;
+  });
+  $('editDeliveryTotal').textContent='Total estimado: '+editDeliveryMoney(total);
+}
+async function openEditDeliveryOrder(orderId){
+  const order=deliveryOrdersCache.get(orderId);
+  if(!order || !['RECEBIDO','AGUARDANDO_APROVACAO'].includes(order.status) || !['DELIVERY','PICKUP'].includes(order.order_type)){
+    alert('Este pedido não pode mais ser editado. Atualize a lista.');
+    return;
+  }
+  editingDeliveryOrderId=orderId;
+  const {data,error}=await supabase.from('product_accompaniments').select('product_id,name,active').eq('active',true);
+  if(error){alert('Não foi possível carregar os acompanhamentos: '+error.message);return;}
+  editAccompanimentsByProduct=new Map();
+  (data||[]).forEach(a=>{if(!editAccompanimentsByProduct.has(a.product_id))editAccompanimentsByProduct.set(a.product_id,[]);editAccompanimentsByProduct.get(a.product_id).push(a);});
+  $('editDeliveryName').value=order.customer_name||'';
+  $('editDeliveryPhone').value=order.customer_phone||'';
+  $('editDeliveryAddress').value=order.delivery_address||'';
+  $('editDeliveryAddressWrap').classList.toggle('hidden',order.order_type==='PICKUP');
+  $('editDeliveryNotes').value=order.customer_notes||'';
+  $('editDeliveryPayment').value=order.payment_method||'CASH';
+  $('editDeliveryNeedsChange').checked=!!order.needs_change;
+  $('editDeliveryChange').value=order.needs_change?(Number(order.change_for_cents)/100).toFixed(2):'';
+  $('editDeliveryChangeWrap').classList.toggle('hidden',!order.needs_change);
+  $('editDeliveryItems').innerHTML='';
+  (order.order_items||[]).forEach(item=>{
+    const sides=Array.from({length:Number(item.quantity)||1},(_,i)=>(item.order_item_accompaniments||[]).filter(a=>Number(a.unit_index)===i+1).map(a=>a.accompaniment_name));
+    renderEditDeliveryItemRow({...item,_selectedSides:sides});
+  });
+  $('editDeliveryMessage').textContent='';
+  updateEditDeliveryTotal();
+  $('editDeliveryModal').classList.add('open');
+  $('editDeliveryModal').setAttribute('aria-hidden','false');
+}
+$('addEditDeliveryItem').addEventListener('click',()=>renderEditDeliveryItemRow());
+$('closeEditDelivery').addEventListener('click',closeEditDeliveryModal);
+$('cancelEditDelivery').addEventListener('click',closeEditDeliveryModal);
+$('editDeliveryModal').addEventListener('click',e=>{if(e.target.id==='editDeliveryModal')closeEditDeliveryModal();});
+$('editDeliveryNeedsChange').addEventListener('change',()=>{
+  const enabled=$('editDeliveryNeedsChange').checked;
+  $('editDeliveryChangeWrap').classList.toggle('hidden',!enabled);
+  if(!enabled)$('editDeliveryChange').value='';
+});
+$('editDeliveryPayment').addEventListener('change',()=>{
+  if($('editDeliveryPayment').value!=='CASH'){
+    $('editDeliveryNeedsChange').checked=false;
+    $('editDeliveryNeedsChange').dispatchEvent(new Event('change'));
+  }
+});
+$('saveEditDelivery').addEventListener('click',async()=>{
+  const button=$('saveEditDelivery');
+  if(!editingDeliveryOrderId)return;
+  const order=deliveryOrdersCache.get(editingDeliveryOrderId);
+  const rows=[...$('editDeliveryItems').querySelectorAll('.edit-item-row')];
+  const items=[];
+  for(const row of rows){
+    const productId=row.querySelector('[data-edit-product]').value;
+    const quantity=Number(row.querySelector('[data-edit-quantity]').value);
+    if(!productId||!Number.isInteger(quantity)||quantity<1||quantity>20){
+      $('editDeliveryMessage').textContent='Selecione os pratos e informe quantidades entre 1 e 20.';return;
+    }
+    const sides=Array.from({length:quantity},(_,unit)=>{
+      const values=[...row.querySelectorAll('[data-edit-side^="'+unit+'-"]')].map(s=>s.value).filter(Boolean);
+      if(new Set(values).size!==values.length)throw new Error('Não repita o mesmo acompanhamento na mesma quentinha.');
+      return values;
+    });
+    items.push({product_id:productId,quantity,accompaniments_by_unit:sides});
+  }
+  if(!items.length){$('editDeliveryMessage').textContent='Adicione pelo menos um prato.';return;}
+  const needsChange=$('editDeliveryNeedsChange').checked;
+  const changeCents=needsChange?Math.round(Number($('editDeliveryChange').value)*100):null;
+  if(needsChange&&(!Number.isInteger(changeCents)||changeCents<=0)){$('editDeliveryMessage').textContent='Informe um valor válido para o troco.';return;}
+  button.disabled=true;button.textContent='Salvando...';
+  try{
+    const {data,error}=await supabase.rpc('edit_pending_delivery_order',{
+      p_order_id:editingDeliveryOrderId,
+      p_customer_name:$('editDeliveryName').value.trim(),
+      p_customer_phone:$('editDeliveryPhone').value.trim(),
+      p_delivery_address:order.order_type==='PICKUP'?'':$('editDeliveryAddress').value.trim(),
+      p_payment_method:$('editDeliveryPayment').value,
+      p_needs_change:needsChange,
+      p_change_for_cents:changeCents,
+      p_customer_notes:$('editDeliveryNotes').value.trim(),
+      p_items:items
+    });
+    if(error)throw error;
+    closeEditDeliveryModal();
+    alert('Pedido atualizado! O total e o estoque foram recalculados.');
+    await loadDeliveryOrders();
+    await loadProducts();
+  }catch(error){$('editDeliveryMessage').textContent=error.message||'Não foi possível salvar as alterações.';}
+  finally{button.disabled=false;button.textContent='Salvar alterações';}
+});
+
 async function loadDeliveryOrders() {
   const list = $('deliveryOrderList');
   list.textContent = 'Carregando pedidos...';
 
   const { data, error } = await supabase
     .from('orders')
-    .select('id, order_number, order_type, status, customer_name, customer_phone, delivery_address, customer_notes, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_name_snapshot, quantity, unit_price_cents, notes, order_item_accompaniments(accompaniment_name, unit_index))')
+    .select('id, order_number, order_type, status, customer_name, customer_phone, delivery_address, customer_notes, payment_method, total_cents, needs_change, change_for_cents, cancellation_reason, created_at, order_items(product_id, product_name_snapshot, quantity, unit_price_cents, notes, order_item_accompaniments(accompaniment_name, unit_index))')
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -1178,6 +1359,7 @@ async function loadDeliveryOrders() {
     const isPickup = order.order_type === 'PICKUP';
     const modalityLabel = isSalon ? 'SALÃO' : (isPickup ? 'RETIRADA NO LOCAL' : 'ENTREGA');
     const isPending = ['RECEBIDO', 'AGUARDANDO_APROVACAO'].includes(order.status);
+    const isDeliveryOrder = ['DELIVERY','PICKUP'].includes(order.order_type);
     const rejection = order.status === 'CANCELADO' && order.cancellation_reason
       ? `<div class="message error"><strong>Motivo da recusa:</strong> ${escapeHTML(order.cancellation_reason)}</div>`
       : '';
@@ -1185,9 +1367,10 @@ async function loadDeliveryOrders() {
     const canPrint = ['APROVADO', 'ENVIADO_IMPRESSAO', 'IMPRESSO', 'FALHA_IMPRESSAO', 'ENTREGUE'].includes(order.status);
     const actions = `
       <div class="product-actions" style="margin-top:12px">
-        ${isPending ? `
+        ${isPending && isDeliveryOrder ? `
           <button class="primary" type="button" data-order-accept="${order.id}">Aceitar pedido</button>
-          <button class="danger" type="button" data-order-reject="${order.id}">Cancelar pedido</button>
+          <button class="secondary" type="button" data-order-edit="${order.id}">Editar pedido</button>
+          <button class="danger" type="button" data-order-delete="${order.id}">Excluir pedido</button>
         ` : ''}
         ${isAccepted ? `<button class="primary" type="button" data-order-deliver="${order.id}">${isPickup ? 'Marcar como retirado' : 'Marcar como entregue'}</button>` : ''}
         ${canPrint ? `<button class="primary" type="button" data-order-print-both="${order.id}">${order.status === 'IMPRESSO' ? 'Imprimir duas vias novamente' : 'Imprimir duas vias'}</button>` : ''}
@@ -1482,6 +1665,19 @@ const handleOrderAction = async (event) => {
       bothPrintButton.textContent = originalLabel;
     }
     return;
+  }
+  const editButton = event.target.closest('[data-order-edit]');
+  if(editButton){ await openEditDeliveryOrder(editButton.dataset.orderEdit); return; }
+  const deleteButton = event.target.closest('[data-order-delete]');
+  if(deleteButton){
+    const reason=prompt('Informe o motivo do cancelamento deste pedido:');
+    if(reason===null)return;
+    if(reason.trim().length<3){alert('Informe um motivo com pelo menos 3 caracteres.');return;}
+    deleteButton.disabled=true;
+    const {error}=await supabase.rpc('cancel_pending_delivery_order',{p_order_id:deleteButton.dataset.orderDelete,p_reason:reason.trim()});
+    if(error){alert('Não foi possível cancelar o pedido: '+error.message);deleteButton.disabled=false;return;}
+    alert('Pedido cancelado. O registro foi mantido no histórico e o estoque foi devolvido.');
+    await loadDeliveryOrders();await loadProducts();return;
   }
   const acceptButton = event.target.closest('[data-order-accept]');
   const rejectButton = event.target.closest('[data-order-reject]');
