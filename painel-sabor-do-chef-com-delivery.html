@@ -1525,7 +1525,7 @@ function printDeliveryTickets(order, ticketType = 'both') {
       if (item.notes) kitchenLines.push(...wrap('  Obs.: ' + item.notes));
       for (let unit = 0; unit < quantity; unit++) {
         const selected = (item.order_item_accompaniments || [])
-          .filter(option => Number(option.unit_index) === unit)
+          .filter(option => Number(option.unit_index) === unit + 1)
           .map(option => option.accompaniment_name);
         if (selected.length) kitchenLines.push(...wrap('  Unidade ' + (unit + 1) + ': ' + selected.join(', ')));
       }
@@ -1598,7 +1598,7 @@ function printDeliveryTickets(order, ticketType = 'both') {
     const accompanimentLines = [];
     for (let unit = 0; unit < quantity; unit++) {
       const selected = (item.order_item_accompaniments || [])
-        .filter(option => Number(option.unit_index) === unit)
+        .filter(option => Number(option.unit_index) === unit + 1)
         .map(option => option.accompaniment_name);
       if (selected.length) accompanimentLines.push('<div class="detail">Unidade ' + (unit + 1) + ': ' + selected.map(escapeHTML).join(', ') + '</div>');
     }
