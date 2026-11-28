@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#b5121b">
+<title>Sabor do Chef | Acesso da equipe</title>
+<style>
+:root{--red:#b5121b;--dark:#850d14;--bg:#f4f5f7;--text:#252832;--muted:#737985;--border:#e7e9ee}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+header{background:linear-gradient(115deg,#710b12,#b5121b 65%,#cf2931);color:#fff;padding:18px max(18px,calc((100% - 1080px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px}
+header h1{font-size:21px;margin:0;font-weight:850}header small{opacity:.88}
+main{width:min(1080px,calc(100% - 28px));margin:28px auto}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 8px 28px #2026380a;margin-bottom:16px}
+.login{max-width:430px;margin:64px auto}.brand{text-align:center;color:var(--red);font-size:27px;font-weight:900;margin-bottom:20px}
+h2{font-size:19px;margin:0 0 14px}label{display:block;font-size:13px;font-weight:750;margin:14px 0 6px}
+input{width:100%;padding:13px;border:1px solid #dfe2e8;border-radius:10px;font:inherit}
+button,.link{display:inline-block;border:0;border-radius:10px;padding:12px 16px;font-weight:800;text-decoration:none;cursor:pointer}
+.primary{background:var(--red);color:#fff}.secondary{background:#f1f2f5;color:#343944}
+.full{width:100%;margin-top:18px}.muted{color:var(--muted);font-size:13px}.message{font-size:14px;margin-top:12px}.error{color:#b00020}.success{color:#16723a}
+.hidden{display:none!important}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:start}
+.table-card{min-width:0}
+.order-card{border:1px solid var(--border);border-radius:13px;padding:12px;background:#fff;margin:0;min-width:0}
+.table-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:54px}
+.table-number{font-size:30px;line-height:1;font-weight:950;letter-spacing:-1px;color:var(--red);white-space:nowrap}
+.table-state{font-size:11px;padding:4px 7px}
+.table-total{font-size:11px;color:var(--muted);margin-top:5px;font-weight:750}
+.table-details{border-top:1px solid var(--border);margin-top:10px;padding-top:8px}
+.table-details summary{cursor:pointer;color:var(--red);font-size:12px;font-weight:850;list-style:none}
+.table-details summary::-webkit-details-marker{display:none}
+.table-details summary:after{content:'＋';float:right}
+.table-details[open] summary:after{content:'−'}
+.table-details>*:not(summary){margin-top:10px}
+@media(max-width:900px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.order-card{padding:10px}.table-number{font-size:27px}.table-state{font-size:10px;padding:3px 6px}}
+.order-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff;margin:12px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.danger{background:#fff0f0;color:#a10e18}.order-card ul{padding-left:20px}.table-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff}
+.pill{display:inline-block;border-radius:30px;padding:4px 9px;font-size:12px;font-weight:800;background:#edf7ef;color:#16723a}
+.pill.closed{background:#f1f2f5;color:#626875}
+.notice{padding:14px;border:1px solid #f0d99b;background:#fff9e9;border-radius:12px;margin-top:14px}
+.salon-composer{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.salon-composer h3{font-size:22px;font-weight:950;color:var(--red);margin:8px 0}
+.salon-categories{display:flex;gap:7px;overflow:auto;padding:3px 0 10px}
+.salon-categories button{white-space:nowrap;padding:8px 11px;font-size:12px;background:#f1f2f5;color:#343944}
+.salon-categories button.active{background:var(--red);color:#fff}
+.salon-products{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.salon-product{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#fff;min-width:0}
+.salon-product img{display:block;width:100%;height:112px;object-fit:cover;background:#f1f2f5}
+.salon-product-info{padding:9px}
+.salon-product-name{font-size:13px;font-weight:850;line-height:1.25;min-height:34px}
+.salon-product-price{font-size:13px;font-weight:800;color:var(--red);margin:5px 0}
+.salon-product .primary{width:100%;padding:8px;font-size:12px}
+.salon-cart{margin-top:14px;border:1px solid #ead0d2;background:#fffafa;border-radius:12px;padding:12px}
+.salon-cart-line{padding:10px 0;border-bottom:1px solid var(--border)}
+.salon-cart-line:last-child{border-bottom:0}
+.salon-unit{background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px;margin-top:7px}
+.salon-sides{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.salon-sides label{display:inline-flex;align-items:center;gap:5px;margin:0;font-size:11px;font-weight:600}
+.salon-sides input{width:auto;padding:0}
+.salon-cart textarea{width:100%;padding:10px;border:1px solid #dfe2e8;border-radius:9px;font:inherit;resize:vertical}
+.salon-cart-count{font-weight:900;color:var(--red)}
+.salon-feedback{font-size:12px;color:#16723a;min-height:18px;margin:6px 0}
+@media(max-width:600px){.salon-products{grid-template-columns:repeat(2,minmax(0,1fr))}.salon-product img{height:88px}}
+
+@media(max-width:600px){main{margin:16px auto}.card{padding:17px}.login{margin:32px auto}}
+
+.salon-table-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.salon-table-tile{border:0;border-radius:16px;padding:16px;text-align:left;min-height:150px;color:#fff;box-shadow:0 6px 18px #20263818}
+.salon-table-tile.free{background:linear-gradient(145deg,#13783d,#20a45a)}
+.salon-table-tile.available{background:linear-gradient(145deg,#13783d,#20a45a)}
+.salon-table-tile.busy{background:linear-gradient(145deg,#13783d,#20a45a)}
+.salon-table-tile.payment-pending{background:linear-gradient(145deg,#1746a2,#2875df)}
+.salon-table-tile.inactive{background:linear-gradient(145deg,#626875,#858b96);opacity:.82;cursor:not-allowed}
+.salon-table-tile .big{font-size:36px;line-height:1;font-weight:950;display:block;margin-bottom:12px}
+.salon-table-tile .meta{display:block;font-size:12px;margin-top:5px;opacity:.96}
+.salon-screen-nav{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.salon-screen-nav button{flex:1}
+.salon-menu-screen{padding-bottom:92px}
+.salon-menu-screen .salon-categories{position:sticky;top:0;background:#fff;z-index:3;padding:10px 0}
+.salon-cart-open{position:fixed;z-index:15;left:14px;right:14px;bottom:14px;width:calc(100% - 28px);box-shadow:0 8px 28px #20263835;font-size:16px}
+.salon-cart-screen{padding-bottom:20px}
+.salon-cart-screen .salon-cart{margin-top:12px}
+.salon-cart-screen .salon-submit{position:sticky;bottom:12px;box-shadow:0 4px 18px #20263820}
+.salon-product-description{font-size:11px;color:var(--muted);line-height:1.35;margin-top:4px;min-height:28px}
+.salon-order-history{border:1px solid var(--border);border-radius:12px;padding:12px;margin:10px 0;background:#fff}
+.salon-order-history .source{font-size:11px;font-weight:850;color:var(--red)}
+.salon-table-status{font-weight:900}
+.pending-jump{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin:16px 0;padding:15px 17px;text-align:left;background:var(--red);color:#fff;border-radius:13px}
+.pending-jump strong{font-size:14px}.pending-count{background:#fff;color:var(--red);border-radius:999px;min-width:30px;padding:4px 9px;text-align:center;font-weight:950}
+.payment-confirm-overlay{position:fixed;inset:0;z-index:50;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px}
+.payment-confirm-card{background:#fff;width:min(100%,460px);max-height:88vh;overflow:auto;border-radius:17px;padding:20px;box-shadow:0 16px 48px #0003}
+.payment-confirm-note{white-space:pre-wrap;background:#f5f6f8;border:1px solid var(--border);border-radius:10px;padding:12px;margin:8px 0 14px;min-height:42px}
+.payment-confirm-actions{display:flex;gap:9px;margin-top:16px}.payment-confirm-actions button{flex:1}
+@media(max-width:420px){.salon-table-tile{min-height:132px;padding:12px}.salon-table-tile .big{font-size:32px}}
+/* Cartões compactos para visualizar as 10 mesas no celular */
+.salon-table-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.salon-table-tile{min-height:0;height:76px;padding:8px 10px;border-radius:11px;box-shadow:0 2px 8px #20263812;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px}
+.salon-table-tile .big{font-size:20px;line-height:1.05;margin:0;letter-spacing:-.3px}
+.salon-table-tile .table-state{font-size:9px;line-height:1.1;padding:0;letter-spacing:.35px}
+.salon-table-tile .meta{display:none}
+.salon-pending-screen{padding:14px}
+.salon-pending-screen .salon-order-history{padding:11px;margin:9px 0}
+.salon-screen-nav{position:sticky;top:0;z-index:5;background:var(--bg);padding:4px 0}
+.salon-screen-nav button{font-size:12px;padding:11px 10px}
+@media(max-width:420px){.salon-table-grid{gap:6px}.salon-table-tile{height:70px;padding:7px 9px}.salon-table-tile .big{font-size:19px}.salon-pending-screen{padding:12px}}
+
+
+</style>
+</head>
+<body>
+<header><div><h1>Sabor do Chef</h1><small>Acesso da equipe</small></div><button id="logoutBtn" class="secondary hidden" type="button">Sair</button></header>
+<main>
+<section id="loginScreen" class="card login">
+<div class="brand">Sabor do Chef</div>
+<h2>Entrar no sistema</h2>
+<p class="muted">Use seu e-mail e sua senha. O sistema identificará automaticamente seu perfil e abrirá somente as funções autorizadas.</p>
+<form id="loginForm">
+<label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required placeholder="Seu e-mail">
+<label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" required placeholder="Sua senha">
+<button class="primary full" type="submit">Entrar</button>
+<div id="loginMessage" class="message" aria-live="polite"></div>
+<button class="secondary full" id="forgotPasswordBtn" type="button">Criar ou recuperar minha senha</button>
+</form>
+</section>
+<section id="passwordScreen" class="card login hidden">
+<div class="brand">Sabor do Chef</div>
+<h2>Definir senha de acesso</h2>
+<p class="muted">Crie uma senha para acessar sua área de funcionário.</p>
+<form id="passwordForm">
+<label for="newPassword">Nova senha</label><input id="newPassword" type="password" minlength="8" autocomplete="new-password" required placeholder="Mínimo de 8 caracteres">
+<label for="confirmPassword">Confirmar nova senha</label><input id="confirmPassword" type="password" minlength="8" autocomplete="new-password" required placeholder="Repita a senha">
+<button class="primary full" type="submit">Salvar senha</button>
+<div id="passwordMessage" class="message" aria-live="polite"></div>
+</form>
+</section>
+<section id="portalScreen" class="hidden">
+<div class="card">
+<div class="top"><div><h2 id="welcomeTitle">Área do funcionário</h2><div id="roleLabel" class="muted"></div></div><a class="link secondary" href="./painel-sabor-do-chef-com-delivery.html" id="adminLink">Painel administrativo</a></div>
+<div id="roleContent"></div>
+<div id="portalMessage" class="message" aria-live="polite"></div>
+</div>
+</section>
+</main>
+<div id="paymentConfirmModal" class="payment-confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="paymentConfirmTitle">
+  <div class="payment-confirm-card">
+    <h2 id="paymentConfirmTitle">Confirmar pagamento</h2>
+    <p id="paymentConfirmOrder" class="muted"></p>
+    <strong>Observação escrita pelo cliente</strong>
+    <div id="paymentConfirmNote" class="payment-confirm-note"></div>
+    <label for="paymentConfirmMethod">Forma realmente recebida no caixa</label>
+    <select id="paymentConfirmMethod">
+      <option value="CASH">Dinheiro</option>
+      <option value="PIX">Pix</option>
+      <option value="CARD">Cartão</option>
+    </select>
+    <p class="muted">A forma informada pelo cliente já vem selecionada. Altere somente se recebeu de outra maneira.</p>
+    <div class="payment-confirm-actions">
+      <button type="button" class="secondary" id="cancelPaymentConfirm">Voltar</button>
+      <button type="button" class="primary" id="confirmPaymentReceived">Confirmar recebimento</button>
+    </div>
+  </div>
+</div>
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const supabase=createClient('https://enakuleybfvzqurrttwl.supabase.co','sb_publishable_JnYedcVNm6Q2tao49qaYzQ_qxjelyqA');
+const $=id=>document.getElementById(id);
+const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+let salonRealtimeChannel=null;
+let paymentOrderBeingConfirmed=null;
+function closePaymentConfirm(){ $('paymentConfirmModal').classList.add('hidden'); paymentOrderBeingConfirmed=null; }
+$('cancelPaymentConfirm').addEventListener('click',closePaymentConfirm);
+$('paymentConfirmModal').addEventListener('click',event=>{if(event.target===$('paymentConfirmModal'))closePaymentConfirm();});
+$('confirmPaymentReceived').addEventListener('click',async()=>{
+  if(!paymentOrderBeingConfirmed)return;
+  const order=paymentOrderBeingConfirmed;
+  const method=$('paymentConfirmMethod').value;
+  if(!['CASH','PIX','CARD'].includes(method))return;
+  const button=$('confirmPaymentReceived');
+  button.disabled=true;button.textContent='Registrando pagamento...';
+  const {error}=await supabase.rpc('settle_salon_order_payment',{p_order_id:order.id,p_payment_method:method});
+  button.disabled=false;button.textContent='Confirmar recebimento';
+  if(error){alert(error.message);return;}
+  closePaymentConfirm();
+  await loadSalonOverview();
+});
+function message(id,text,type=''){const el=$(id);el.textContent=text;el.className='message '+type}
+function showLogin(){ $('loginScreen').classList.remove('hidden');$('passwordScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
+function showPassword(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('passwordScreen').classList.remove('hidden');$('logoutBtn').classList.add('hidden'); }
+function showPortal(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.remove('hidden');$('logoutBtn').classList.remove('hidden'); }
+function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+let salonCurrentView='tables';
+function renderSalonOverview(tables,pending){
+  const paymentLabel=m=>m==='CASH'?'Dinheiro':m==='PIX'?'Pix':m==='CARD'?'Cartão':'Não informado';
+  if(salonCurrentView==='pending'){
+    const rows=pending.map(o=>{
+      const table=Array.isArray(o.restaurant_tables)?o.restaurant_tables[0]:o.restaurant_tables;
+      return '<article class="salon-order-history"><div class="source">PAGAMENTO PENDENTE · MESA '+safe(table?.table_number??'N/I')+'</div><strong>Pedido #'+safe(o.order_number)+' · '+safe(o.customer_name||'Cliente')+'</strong><p class="muted">Mesa '+safe(table?.table_number??'N/I')+' · Total: '+money(o.total_cents)+'</p><p class="muted">Forma informada: '+paymentLabel(o.payment_method)+' · '+new Date(o.created_at).toLocaleString('pt-BR')+'</p>'+(o.customer_notes?'<p class="muted"><strong>Observação do cliente:</strong> '+safe(o.customer_notes)+'</p>':'<p class="muted">O cliente não deixou observação.</p>')+'<button type="button" class="primary" data-settle="'+o.id+'">Confirmar pagamento</button></article>';
+    }).join('');
+    $('roleContent').innerHTML='<div class="salon-screen-nav"><button type="button" class="secondary" id="backToSalon">← VOLTAR PARA O SALÃO</button><button type="button" class="secondary" id="refreshSalon">Atualizar</button></div><div class="card salon-pending-screen"><div class="top"><div><h2>Pedidos aguardando pagamento</h2><p class="muted">Confira a observação e confirme a forma realmente recebida no caixa.</p></div><span class="pending-count">'+pending.length+'</span></div>'+(rows||'<p class="muted">Não há pedidos pendentes de pagamento.</p>')+'</div>';
+    $('backToSalon').addEventListener('click',()=>{salonCurrentView='tables';renderSalonOverview(tables,pending);});
+  }else{
+    const cards=tables.map(t=>'<button type="button" class="salon-table-tile available" data-table="'+t.id+'" '+(!t.active?'disabled':'')+'><span class="big">MESA '+safe(t.table_number)+'</span><span class="table-state">'+(t.active?'DISPONÍVEL':'DESATIVADA')+'</span></button>').join('');
+    $('roleContent').innerHTML='<div class="top"><div><h2>Salão · 10 mesas</h2><p class="muted">Selecione uma mesa para registrar um novo pedido.</p></div><button class="secondary" id="refreshSalon">Atualizar</button></div><button type="button" class="pending-jump" id="goPendingPayments"><strong>PEDIDOS AGUARDANDO PAGAMENTO</strong><span class="pending-count">'+pending.length+'</span></button><div class="salon-table-grid">'+(cards||'<p class="muted">Nenhuma mesa cadastrada.</p>')+'</div>';
+    $('goPendingPayments').addEventListener('click',()=>{salonCurrentView='pending';renderSalonOverview(tables,pending);});
+    $('roleContent').querySelectorAll('[data-table]').forEach(btn=>btn.addEventListener('click',()=>{
+      if(btn.disabled)return;
+      location.href='./pedido-salao.html?funcionario=1&mesa_id='+encodeURIComponent(btn.dataset.table);
+    }));
+  }
+  $('refreshSalon').addEventListener('click',()=>loadSalonOverview());
+  $('roleContent').querySelectorAll('[data-settle]').forEach(btn=>btn.addEventListener('click',()=>{
+    const order=pending.find(item=>item.id===btn.dataset.settle);
+    if(!order)return;
+    paymentOrderBeingConfirmed=order;
+    const informed=['CASH','PIX','CARD'].includes(order.payment_method)?order.payment_method:'CASH';
+    $('paymentConfirmOrder').textContent='Pedido #'+order.order_number+' · '+(order.customer_name||'Cliente')+' · '+money(order.total_cents)+' · Forma informada: '+paymentLabel(order.payment_method);
+    $('paymentConfirmNote').textContent=order.customer_notes?.trim()||'O cliente não deixou observação.';
+    $('paymentConfirmMethod').value=informed;
+    $('paymentConfirmModal').classList.remove('hidden');
+  }));
+}
+async function loadSalonOverview(){
+  if(!$('roleContent').innerHTML.trim()) $('roleContent').innerHTML='<p class="muted">Carregando mesas e pagamentos pendentes...</p>';
+  const [tr,pr]=await Promise.all([
+    supabase.from('restaurant_tables').select('id,table_number,active').order('table_number'),
+    supabase.from('orders')
+      .select('id,order_number,customer_name,table_id,payment_method,payment_status,total_cents,created_at,customer_notes,restaurant_tables(table_number)')
+      .eq('order_type','SALAO').eq('payment_status','PENDENTE').neq('status','CANCELADO')
+      .order('created_at',{ascending:true}).limit(100)
+  ]);
+  if(tr.error)throw tr.error;if(pr.error)throw pr.error;
+  const tables=tr.data||[],pending=pr.data||[];
+  if(!salonRealtimeChannel){
+    salonRealtimeChannel=supabase.channel('salon-individual-orders-live')
+      .on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>{if($('roleContent')?.dataset?.salonMode==='true')loadSalonOverview().catch(e=>message('portalMessage',e.message||'Falha ao atualizar salão.','error'));})
+      .subscribe();
+  }
+  $('roleContent').dataset.salonMode='true';
+  renderSalonOverview(tables,pending);
+}
+
+async function loadDeliveryOrders(){
+  const {data:orders,error}=await supabase.from('orders')
+    .select('id,order_number,order_type,status,customer_name,customer_phone,delivery_address,payment_method,total_cents,needs_change,change_for_cents,customer_notes,cancellation_reason,created_at,order_items(id,product_name_snapshot,unit_price_cents,quantity,notes)')
+    .in('order_type',['DELIVERY','PICKUP']).order('created_at',{ascending:false}).limit(60);
+  if(error) throw error;
+  const money=c=>((Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}));
+  const cards=(orders||[]).map(o=>{
+    const items=(o.order_items||[]).map(i=>'<li>'+safe(i.quantity)+'x '+safe(i.product_name_snapshot)+' — '+money(i.unit_price_cents*i.quantity)+(i.notes?'<br><small>'+safe(i.notes)+'</small>':'')+'</li>').join('');
+    const pending=['RECEBIDO','AGUARDANDO_APROVACAO'].includes(o.status);
+    const approved=['APROVADO','ENVIADO_IMPRESSAO','IMPRESSO','FALHA_IMPRESSAO'].includes(o.status);
+    const buttons=pending?'<button class="primary" data-action="APPROVE" data-id="'+o.id+'">Aceitar pedido</button><button class="danger" data-action="REJECT" data-id="'+o.id+'">Recusar</button>':approved?'<button class="primary" data-action="DELIVER" data-id="'+o.id+'">'+(o.order_type==='PICKUP'?'Marcar como retirado':'Marcar como entregue')+'</button>':'';
+    return '<article class="order-card"><div class="top"><strong>Pedido #'+safe(o.order_number)+' · '+(o.order_type==='PICKUP'?'Retirada':'Entrega')+'</strong><span class="pill '+(o.status==='CANCELADO'?'closed':'')+'">'+safe(o.status)+'</span></div><p><strong>'+safe(o.customer_name||'Cliente')+'</strong> · '+safe(o.customer_phone||'')+'</p><p class="muted">'+safe(o.delivery_address||'Retirada no local')+'</p><ul>'+items+'</ul><p><strong>Total: '+money(o.total_cents)+'</strong></p>'+(o.needs_change?'<p>Troco para: '+money(o.change_for_cents)+'</p>':'')+(o.customer_notes?'<p>Observação: '+safe(o.customer_notes)+'</p>':'')+(o.cancellation_reason?'<p>Motivo: '+safe(o.cancellation_reason)+'</p>':'')+'<p class="muted">'+new Date(o.created_at).toLocaleString('pt-BR')+'</p><div class="actions">'+buttons+'</div></article>';
+  }).join('');
+  $('roleContent').innerHTML='<div class="top"><h2>Pedidos de entrega e retirada</h2><button class="secondary" id="refreshDelivery">Atualizar</button></div><p class="muted">Esta conta só visualiza pedidos de entrega/retirada e executa as ações permitidas. Produtos, preços, salão e configurações não ficam disponíveis.</p>'+(cards||'<p class="muted">Nenhum pedido encontrado.</p>');
+  $('refreshDelivery').addEventListener('click',loadDeliveryOrders);
+  $('roleContent').querySelectorAll('[data-action]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const action=btn.dataset.action;let reason=null;
+    if(action==='REJECT'){reason=window.prompt('Informe o motivo da recusa:');if(reason===null)return;if(reason.trim().length<3){alert('Informe um motivo com pelo menos 3 caracteres.');return;}}
+    btn.disabled=true;
+    const {error}=await supabase.rpc('set_delivery_order_action',{p_order_id:btn.dataset.id,p_action:action,p_reason:reason});
+    if(error){alert(error.message);btn.disabled=false;return;}
+    await loadDeliveryOrders();
+  }));
+}
+
+async function startSession(user){
+  try{
+    const {data:role,error}=await supabase.rpc('get_my_access_role');
+    if(error) throw error;
+    if(!role) throw new Error('Esta conta ainda não possui um perfil de acesso ativo. Peça ao administrador para atribuir o perfil.');
+    showPortal();
+    $('welcomeTitle').textContent='Bem-vindo(a)';
+    $('roleLabel').textContent='Perfil identificado: '+role;
+    $('adminLink').classList.toggle('hidden',role!=='ADMIN');
+    if(role==='ADMIN'){
+      $('roleLabel').textContent='Perfil de administrador confirmado. Abrindo o painel...';
+      $('roleContent').innerHTML='<p class="muted">Acesso autorizado. Redirecionando para o painel administrativo...</p>';
+      location.replace('./painel-sabor-do-chef-com-delivery.html');
+      return;
+    }else if(role==='SALON'){
+      await loadSalonOverview();
+    }else if(role==='DELIVERY'){
+      await loadDeliveryOrders();
+    }else{
+      throw new Error('Perfil não reconhecido. Acesso bloqueado.');
+    }
+  }catch(e){await supabase.auth.signOut();showLogin();message('loginMessage',e.message||'Não foi possível validar o acesso.','error')}
+}
+$('loginForm').addEventListener('submit',async e=>{
+ e.preventDefault();message('loginMessage','Validando conta...');
+ const {data,error}=await supabase.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+ if(error){message('loginMessage','Não foi possível entrar: '+error.message,'error');return}
+ await startSession(data.user);
+});
+$('forgotPasswordBtn').addEventListener('click',async()=>{
+ const email=$('email').value.trim();
+ if(!email){message('loginMessage','Informe seu e-mail primeiro.','error');return;}
+ message('loginMessage','Enviando link para criar/recuperar a senha...');
+ const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:'https://cardapiosabordochef.com.br/acesso-equipe.html'});
+ if(error){message('loginMessage','Não foi possível enviar: '+error.message,'error');return;}
+ message('loginMessage','Enviamos um link para '+email+'. Abra o e-mail neste celular para definir sua senha.','success');
+});
+$('passwordForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const a=$('newPassword').value,b=$('confirmPassword').value;
+ if(a.length<8){message('passwordMessage','A senha precisa ter pelo menos 8 caracteres.','error');return;}
+ if(a!==b){message('passwordMessage','As senhas não conferem.','error');return;}
+ const {error}=await supabase.auth.updateUser({password:a});
+ if(error){message('passwordMessage','Não foi possível salvar a senha: '+error.message,'error');return;}
+ message('passwordMessage','Senha criada com sucesso. Agora você já pode entrar.','success');
+ await supabase.auth.signOut();$('passwordForm').reset();showLogin();
+});
+supabase.auth.onAuthStateChange((event,session)=>{
+ if(session && (event==='PASSWORD_RECOVERY'||location.hash.includes('type=invite')||location.hash.includes('type=recovery'))){showPassword();}
+});
+$('logoutBtn').addEventListener('click',async()=>{await supabase.auth.signOut();showLogin()});
+const {data:sessionData}=await supabase.auth.getSession();
+if(sessionData.session?.user && (location.hash.includes('type=invite')||location.hash.includes('type=recovery'))) showPassword();
+else if(sessionData.session?.user) await startSession(sessionData.session.user); else showLogin();
+</script>
+</body>
+</html>
