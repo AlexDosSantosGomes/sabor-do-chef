@@ -1086,7 +1086,11 @@ $('accompList').addEventListener('click', async (event) => {
           ? '“' + name + '” cadastrado em mais ' + result.added + ' quentinha(s).'
           : '“' + name + '” já está cadastrado em todas as quentinhas.',
         'success');
-      if (result.added) await renderAccompaniments();
+      if (result.added) {
+        const scrollPosition = window.scrollY;
+        await renderAccompaniments();
+        window.scrollTo({ top: scrollPosition, behavior: 'instant' });
+      }
     } catch (error) {
       showMessage('accompMessage', 'Erro ao cadastrar em todos os pratos: ' + (error.message || error), 'error');
       addAllButton.disabled = false;
