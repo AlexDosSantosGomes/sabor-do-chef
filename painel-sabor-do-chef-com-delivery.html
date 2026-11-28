@@ -1280,9 +1280,10 @@ $('saveEditDelivery').addEventListener('click',async()=>{
     }
     const sides=Array.from({length:quantity},(_,unit)=>{
       const values=[...row.querySelectorAll('[data-edit-side^="'+unit+'-"]')].map(s=>s.value).filter(Boolean);
-      if(new Set(values).size!==values.length)throw new Error('Não repita o mesmo acompanhamento na mesma quentinha.');
+      if(new Set(values).size!==values.length){$('editDeliveryMessage').textContent='Não repita o mesmo acompanhamento na mesma quentinha.';return null;}
       return values;
     });
+    if(sides.some(side=>side===null))return;
     items.push({product_id:productId,quantity,accompaniments_by_unit:sides});
   }
   if(!items.length){$('editDeliveryMessage').textContent='Adicione pelo menos um prato.';return;}
