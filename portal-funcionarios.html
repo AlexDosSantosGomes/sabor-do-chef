@@ -156,6 +156,21 @@ const money=c=>(Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',curre
 let salonRealtimeChannel=null;
 let paymentOrderBeingConfirmed=null;
 function closePaymentConfirm(){ $('paymentConfirmModal').classList.add('hidden'); paymentOrderBeingConfirmed=null; }
+$('cancelPaymentConfirm').addEventListener('click',closePaymentConfirm);
+$('paymentConfirmModal').addEventListener('click',event=>{if(event.target===$('paymentConfirmModal'))closePaymentConfirm();});
+$('confirmPaymentReceived').addEventListener('click',async()=>{
+  if(!paymentOrderBeingConfirmed)return;
+  const order=paymentOrderBeingConfirmed;
+  const method=$('paymentConfirmMethod').value;
+  if(!['CASH','PIX','CARD'].includes(method))return;
+  const button=$('confirmPaymentReceived');
+  button.disabled=true;button.textContent='Registrando pagamento...';
+  const {error}=await supabase.rpc('settle_salon_order_payment',{p_order_id:order.id,p_payment_method:method});
+  button.disabled=false;button.textContent='Confirmar recebimento';
+  if(error){alert(error.message);return;}
+  closePaymentConfirm();
+  await loadSalonOverview();
+});
 function message(id,text,type=''){const el=$(id);el.textContent=text;el.className='message '+type}
 function showLogin(){ $('loginScreen').classList.remove('hidden');$('passwordScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('logoutBtn').classList.add('hidden'); }
 function showPassword(){ $('loginScreen').classList.add('hidden');$('portalScreen').classList.add('hidden');$('passwordScreen').classList.remove('hidden');$('logoutBtn').classList.add('hidden'); }
@@ -204,7 +219,7 @@ async function loadSalonOverview(){
     $('paymentConfirmMethod').value=informed;
     $('paymentConfirmModal').classList.remove('hidden');
   }));
-  requestAnimationFrame(()=>window.scrollTo({top:previousScrollY,behavior:'instant'}));
+  requestAnimationFrame(()=>window.scrollTo(0,previousScrollY));
 }
 async function loadDeliveryOrders(){
   const {data:orders,error}=await supabase.from('orders')
